@@ -1,85 +1,84 @@
-# PICNIC — Hold the Line
+# FLOW — Calm is a System
 
-A bright, **3D** wave-defense tycoon for the browser. It's a perfect afternoon —
-until the ants show up. You're the **frog** on cake duty: snap your tongue at the
-swarm, gather the **crumbs** they drop, and pour those crumbs into glowing pads
-around the blanket to build **Sprinklers**, a **Salt Line** wall, a **Firefly**
-swarm, and your own power — surviving **100 escalating waves** of ants, beetles,
-wasps, and the occasional **Hornet** boss.
+A serene, **black-and-gold** crowd-safety simulator for the browser. You are the calm
+operator at the controls of an event. The crowd is rendered as **flowing light**; the
+threat is a **density heatmap**. Your enemy isn't the people — it's **physics**.
 
-Same core loop as the classic "knights-vs-conquerors" survival-tycoon (move →
-squish → collect → build → survive), reskinned to something everyone knows: a
-picnic you refuse to surrender. Rendered in real 3D with soft sunlight, shadows,
-and a checkered-blanket arena.
+The whole game is built on the real science: crowd disasters are caused by **density,
+not panic**. People are crushed standing up, in dense near-static crowds — not by
+stampedes. So you never harm anyone. You **guide, meter, and relieve**. Gold cells are
+safe; deep-red cells are approaching the crush threshold. You lose if any cell holds in
+the red too long.
 
-> No build step. Three.js is vendored locally, so it's just `<script>` tags + a `<canvas>`.
+> 3D, no build step. Three.js is vendored locally — just `<script>` tags and a `<canvas>`.
 
 ---
 
 ## Play
 
-Serve the folder over `http://` and open it:
+Serve over `http://` and open it:
 
 ```bash
 bun run serve        # → http://localhost:4173
-# or, with Python, from inside this folder:
+# or, from inside this folder:
 python3 -m http.server 4173
 ```
 
-(3D loads via local `js/vendor/three.min.js`, so an offline static server is all you need.)
-
-### Controls
-- **Move:** `WASD` / arrow keys, or drag anywhere (touch / mouse) for a floating joystick.
-- **Attack:** automatic — the frog flicks its tongue at the nearest bug in range.
-- **Build:** stand on a glowing pad; your crumbs pour in until it builds or upgrades.
-- **Pause:** `Esc` or the pause button (sound toggle lives in the pause menu).
+- **Place tools** by selecting one from the dock and clicking the floor.
+- **Pause:** `Esc`. Tools also bind to keys `1`–`4`.
 
 ---
 
-## The loop
+## The lesson (taught through mechanics, not text)
 
-1. **Squish bugs.** Ants, scouts, beetles and wasps stream in from the grass toward the cake.
-   Kill them and they pop into crumbs (currency). Crumbs never despawn — anything you
-   don't pick up is swept into a **round bonus** when the wave clears.
-2. **Gather crumbs.** Walk near them to draw them in (upgrade *Forage* to pull from farther).
-3. **Build the fortress.** Pads are **revealed a few at a time as the base grows** — you
-   start with just a Sprinkler and your Tongue, and new pads fade in (with wide walking
-   lanes between them) as you complete builds. Each one is a visible change:
-   - **Sprinkler** — auto-firing water turret (6 slots, grows taller each level)
-   - **Tongue / Snap / Hop** — your tongue darts get bigger/brighter, you fire faster, you hop quicker
-   - **Firefly** / **Glow** — an orbiting swarm that fires with you, brighter as it powers up
-   - **Salt Line** — a regenerating wall ring the bugs must chew through
-   - **Tier / Frosting** — the cake visibly grows another tier, and re-frosts (regen)
-   - **Forage** — a visible pickup-range aura around the frog
-   - **Bug Spray** — a periodic shockwave that clears the blanket
-4. **Survive to 100.** Difficulty scales every wave; a boss **Hornet** arrives every 10th.
+The first playable level — **"Concert Letting Out"** — teaches three real principles, and
+each one *emerges from the simulation*:
 
-Win by carrying the cake through wave 100.
+1. **The fundamental diagram** — flow = density × speed. A pinch's throughput rises with
+   density up to a critical point, then **collapses**. Cramming a jammed exit makes it
+   worse; metering makes it better. (The pinch shows its live throughput; watch it fall as
+   density climbs past ~4 p/m².)
+2. **Faster-is-slower** — a **PA: Hurry** at a crowded pinch *lowers* throughput (impatient
+   bodies clog the opening); **PA: Calm** clears it faster. The numbers move opposite to
+   intuition.
+3. **Upstream control** — you don't fix the pinch *at* the pinch. You place a **Metering
+   Gate** at the **entry**, holding people safely outside before they ever mass. A gate
+   placed at the jam itself does nothing — which is the whole point.
+
+**Tools:** Barrier (shape flow), Metering Gate (a release line — meter the entry),
+PA: Calm / PA: Hurry (shift the crowd's urgency).
 
 ---
 
-## Tuning
+## Status & roadmap
 
-All balance lives in [`js/config.js`](js/config.js) — pest stats, the per-wave
-scaling curves (`hpMul`, `dmgMul`, `bountyMul`, `waveCount`, boss HP), the pad
-layout, and every build blueprint's cost/stat tables. The curve is tuned so a
-competent player out-scales the swarm in the mid-game and pushes a near-max base
-+ 10-Firefly swarm through the final boss (verified end-to-end with headless
-auto-play sims).
+**Phase A — playable vertical slice (done):** the Concert level, the density heatmap, the
+crowd sim, the CROWD SAFETY lose condition, the three tools, and all three principles —
+verified end-to-end (no-action crushes; entry-metering survives; a mid-concourse gate
+correctly does *not* save it).
 
-## Structure
+Planned next:
+- **Phase B** — pressure-wave propagation + the mastery beat (defuse a near-disaster purely
+  by upstream metering, never touching the danger zone).
+- **Phase C** — the tycoon/meta layer: reputation + capacity, between-event upgrades
+  (widen concourse, add exits, sightlines, sensors), and the venue unlock tree.
+- **Phase D** — the **City District** track (continuous counterflows, transit surges).
 
-```
-index.html        # shell + HUD/overlay markup + projected pad labels
-css/style.css     # the whole look (sunny glass UI, type)
-js/vendor/three.min.js  # Three.js r128 (vendored, UMD global)
-js/util.js        # math, easing, RNG, tiny WebAudio SFX
-js/config.js      # ALL balance + build blueprints + pad layout
-js/game.js        # simulation (waves/economy/combat/build) + the 3D renderer
-serve.mjs         # optional tiny static server (Bun)
-```
+---
 
-The deterministic simulation is renderer-agnostic; `game.js` maps sim coords
-`(x, y)` onto the ground plane `(x, z)` and drives a Three.js scene over it.
+## How it works
 
-Built as a self-contained study — kept deliberately separate from everything else.
+The simulation is 2D on the ground plane (the view is a steep 3D operator's-eye camera).
+- `js/grid.js` — the density grid (1m cells → persons/m²), the goal **routing field**
+  (flood-fill), the **heatmap** colour ramp, and the dwell/lose tracking.
+- `js/sim.js` — pedestrians (social-force-lite) + the **openings** that enforce the
+  fundamental diagram (throughput) and faster-is-slower (the clog term); spatial-hashed.
+- `js/config.js` — **all tuning**: densities, thresholds, the fundamental-diagram curve,
+  tool costs, and the level script. Start here to rebalance.
+- `js/render.js` — the 3D scene: near-black floor carrying the heatmap as a live texture,
+  the crowd as one additive gold point cloud.
+- `js/game.js` — orchestrator: arrivals → outside queue → metered admission, tool
+  placement, HUD, and the win/lose watch.
+- `js/util.js` — math/easing/RNG + a tiny WebAudio SFX kit (reused).
+
+Built as a self-contained study — kept separate from everything else.
