@@ -1,11 +1,11 @@
 # PICNIC — Hold the Line
 
 A bright, **3D** wave-defense tycoon for the browser. It's a perfect afternoon —
-until the ants show up. You're the **ladybug** on cake duty: zap the swarm,
-gather the **crumbs** they drop, and pour those crumbs into glowing pads around
-the blanket to build **Sprinklers**, a **Salt Line** wall, a **Firefly** swarm,
-and your own power — surviving **100 escalating waves** of ants, beetles, wasps,
-and the occasional **Hornet** boss.
+until the ants show up. You're the **frog** on cake duty: snap your tongue at the
+swarm, gather the **crumbs** they drop, and pour those crumbs into glowing pads
+around the blanket to build **Sprinklers**, a **Salt Line** wall, a **Firefly**
+swarm, and your own power — surviving **100 escalating waves** of ants, beetles,
+wasps, and the occasional **Hornet** boss.
 
 Same core loop as the classic "knights-vs-conquerors" survival-tycoon (move →
 squish → collect → build → survive), reskinned to something everyone knows: a
@@ -30,7 +30,7 @@ python3 -m http.server 4173
 
 ### Controls
 - **Move:** `WASD` / arrow keys, or drag anywhere (touch / mouse) for a floating joystick.
-- **Attack:** automatic — the ladybug zaps the nearest bug in range.
+- **Attack:** automatic — the frog flicks its tongue at the nearest bug in range.
 - **Build:** stand on a glowing pad; your crumbs pour in until it builds or upgrades.
 - **Pause:** `Esc` or the pause button (sound toggle lives in the pause menu).
 
@@ -39,17 +39,20 @@ python3 -m http.server 4173
 ## The loop
 
 1. **Squish bugs.** Ants, scouts, beetles and wasps stream in from the grass toward the cake.
-   Kill them and they pop into crumbs (currency).
+   Kill them and they pop into crumbs (currency). Crumbs never despawn — anything you
+   don't pick up is swept into a **round bonus** when the wave clears.
 2. **Gather crumbs.** Walk near them to draw them in (upgrade *Forage* to pull from farther).
-3. **Build the fortress.** Pads ring the cake with wide walking lanes between them:
-   - **Sprinkler** — auto-firing turret (6 slots, 6 levels each)
-   - **Firefly** / **Glow** — an orbiting swarm that fires with you, and its power
+3. **Build the fortress.** Pads are **revealed a few at a time as the base grows** — you
+   start with just a Sprinkler and your Tongue, and new pads fade in (with wide walking
+   lanes between them) as you complete builds. Each one is a visible change:
+   - **Sprinkler** — auto-firing water turret (6 slots, grows taller each level)
+   - **Tongue / Snap / Hop** — your tongue darts get bigger/brighter, you fire faster, you hop quicker
+   - **Firefly** / **Glow** — an orbiting swarm that fires with you, brighter as it powers up
    - **Salt Line** — a regenerating wall ring the bugs must chew through
-   - **Sting / Buzz / Wings / Forage** — your damage, fire-rate, speed, pickup range
-   - **Tier / Frosting** — the cake's max HP and regeneration
+   - **Tier / Frosting** — the cake visibly grows another tier, and re-frosts (regen)
+   - **Forage** — a visible pickup-range aura around the frog
    - **Bug Spray** — a periodic shockwave that clears the blanket
-4. **Unlock more.** New pads and bigger tiers open up as you progress.
-5. **Survive to 100.** Difficulty scales every wave; a boss **Hornet** arrives every 10th.
+4. **Survive to 100.** Difficulty scales every wave; a boss **Hornet** arrives every 10th.
 
 Win by carrying the cake through wave 100.
 
