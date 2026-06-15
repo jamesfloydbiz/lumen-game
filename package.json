@@ -1,0 +1,9 @@
+{
+  "name": "lumen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LUMEN — Keeper of the Last Light. A glow-on-indigo wave-defense tycoon.",
+  "scripts": {
+    "serve": "bun run serve.mjs"
+  }
+}
