@@ -20,8 +20,8 @@ class Sim{
     // agents are removed when they reach the goal plaza past them.
     this.pinches=level.pinches.map(p=>({kind:'pinch', x:p.x, y:p.y, nx:0, ny:1, hw:p.w/2, rate:Infinity, budget:0, passing:0, held:0}));
     this.goal=level.goal; this.goalR=level.goalR||3;
-    this.gates=[];      // {kind:'gate', x,y,nx,ny,hw,rate,budget,passing,held}
-    this.paZones=[];    // {x,y,r,factor}
+    this.gates=[];      // (unused in the pad model, kept for safety)
+    this.stewards=[];   // {x,y,r,calm,spread} — built Steward Posts
 
     // spatial hash
     this.hc=CONFIG.rNeighbor; this.hcols=Math.ceil(CONFIG.worldW/this.hc)+2; this.hrows=Math.ceil(CONFIG.worldH/this.hc)+2;
@@ -36,10 +36,8 @@ class Sim{
 
   step(dt){
     const C=CONFIG, g=this.grid;
-    // 1) per-agent urgency from PA zones
-    for(let i=0;i<this.n;i++){ let f=C.urgencyBase;
-      for(const z of this.paZones){ if(U.dist2(this.px[i],this.py[i],z.x,z.y) < z.r*z.r){ f*=z.factor; } }
-      this.urg[i]=f; }
+    // 1) urgency (stewards no longer slow people; they raise crush tolerance via the grid)
+    for(let i=0;i<this.n;i++) this.urg[i]=C.urgencyBase;
 
     this.rehash();
 
@@ -78,40 +76,14 @@ class Sim{
       this.px[i]=nx; this.py[i]=ny; this.vx[i]=nvx; this.vy[i]=nvy;
     }
 
-    // 4) openings — throughput + clog, post-integration gating
-    const openings=this.pinches.concat(this.gates);
-    const removeList=[];
-    for(const o of openings){
-      const tx=-o.ny, ty=o.nx; // tangent
-      let uSum=0,uN=0; const band=[];
-      for(let i=0;i<this.n;i++){ const ddx=this.px[i]-o.x, ddy=this.py[i]-o.y;
-        const along=ddx*o.nx+ddy*o.ny, lat=ddx*tx+ddy*ty;
-        if(Math.abs(lat)<o.hw){ if(along>-3 && along<0.05){ uSum+=this.urg[i]; uN++; }
-          if(along>-0.12 && along<0.5) band.push([i,along]); } }
-      const mean=uN?uSum/uN:1;
-      const dUp=g.densAt(o.x-o.nx*1.2, o.y-o.ny*1.2);
-      // faster-is-slower: impatience (urgency>1) clogs the opening, scaled by how dense it is
-      const densFrac=U.clamp((dUp-C.dSafe)/(C.dJam-C.dSafe),0,1);
-      const clog=C.clogK*Math.max(0,mean-1)*densFrac;
-      const effW=Math.max(C.widthMin, 2*o.hw*(1-clog));
-      let cap=effW*C.Js*C.fdGate(dUp); if(o.kind==='gate') cap=Math.min(cap,o.rate);
-      o.passing=cap; o.held=uN;
-      o.budget=(o.budget||0)+cap*dt;
-      band.sort((a,b)=>b[1]-a[1]); // closest to plane first
-      for(const [i,along] of band){
-        if(o.budget>=1){ o.budget-=1; this.px[i]+=o.nx*0.55; this.py[i]+=o.ny*0.55; }
-        else if(along>=0){ // not granted but already across → shove back upstream, queue
-          this.px[i]-=o.nx*(along+0.06); this.py[i]-=o.ny*(along+0.06);
-          const vn=this.vx[i]*o.nx+this.vy[i]*o.ny; if(vn>0){ this.vx[i]-=vn*o.nx; this.vy[i]-=vn*o.ny; } }
-      }
-    }
-    // 5) removal at the goal plaza
-    const gr2=this.goalR*this.goalR;
+    // 4) flow is limited PHYSICALLY by the gap geometry + crowd density.
+    // density-scaled speed (step 3) gives flow = density × speed and the
+    // crush when a narrow gap is overloaded. Just remove agents at the goal.
+    const removeList=[]; const gr2=this.goalR*this.goalR;
     for(let i=0;i<this.n;i++){ if(U.dist2(this.px[i],this.py[i],this.goal.x,this.goal.y)<gr2) removeList.push(i); }
     if(removeList.length){ removeList.sort((a,b)=>b-a); let prev=-1; for(const i of removeList){ if(i===prev) continue; prev=i; this.remove(i); this.cleared++; } }
   }
 
-  // place a gate at (x,y) oriented to the local flow
-  addGate(x,y,width){ const [dx,dy]=this.grid.dirAt(x,y); const m=Math.hypot(dx,dy)||1;
-    this.gates.push({kind:'gate', x, y, nx:dx/m, ny:dy/m, hw:width/2, rate:CONFIG.tools.gate.rate, budget:0, passing:0, held:0}); return this.gates[this.gates.length-1]; }
+  // widen the exit by `extra` meters (live)
+  widenPinch(extra){ const p=this.pinches[0]; p.hw += extra/2; this.grid.setDividerGap(p.x, p.hw*2); }
 }

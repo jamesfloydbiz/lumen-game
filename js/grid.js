@@ -20,6 +20,7 @@ class Grid{
     this.dwell=new Float32Array(n);
     this.cost=new Float32Array(n).fill(1e6);
     this.img=new Uint8ClampedArray(n*4);
+    this.tol=new Float32Array(n);   // per-cell extra crush tolerance from Steward Posts
     this.barriers=[];          // player-drawn rails (for rendering)
     this.worstDwell=0; this.worstDens=0;
     this.dirty=true;
@@ -55,6 +56,10 @@ class Grid{
     for(let s=0;s<=steps;s++){ const t=s/steps, x=U.lerp(x0,x1,t), y=U.lerp(y0,y1,t); const i=this.ci(x),j=this.cj(y);
       for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){ const ni=i+di,nj=j+dj; if(this.inB(ni,nj)) this.walk[this.idx(ni,nj)]=0; } }   // 3-cell brush — no corner gaps
     this.barriers.push({x0,y0,x1,y1}); this.dirty=true; }
+  // rebuild the divider row at y=8 with a gap of width w centred at cx (for live exit widening)
+  setDividerGap(cx,w){ const j0=this.cj(7.3), j1=this.cj(8.7);   // thin (matches the 1.6m divider) — no deep corridor
+    for(let j=j0;j<=j1;j++) for(let i=0;i<this.cols;i++){ const x=this.cx(i); if(x>-15&&x<15) this.walk[this.idx(i,j)]=(Math.abs(x-cx)<=w/2)?1:0; }
+    this.reflood(); }
   // snapshot/restore walkability (for validating a barrier doesn't seal the exit)
   snapWalk(){ return this.walk.slice(); }
   restoreWalk(snap){ this.walk.set(snap); this.barriers.pop(); this.dirty=true; }
@@ -109,9 +114,12 @@ class Grid{
   walkableAt(x,y){ const i=this.ci(x),j=this.cj(y); return this.inB(i,j)&&this.walk[this.idx(i,j)]; }
 
   // ---- dwell / lose ----
+  setStewards(list){ this.tol.fill(0);
+    for(const z of list){ const i0=this.ci(z.x-z.r),i1=this.ci(z.x+z.r),j0=this.cj(z.y-z.r),j1=this.cj(z.y+z.r);
+      for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){ if(!this.inB(i,j)) continue; const dx=this.cx(i)-z.x,dy=this.cy(j)-z.y; if(dx*dx+dy*dy<=z.r*z.r){ const k=this.idx(i,j); if(z.tol>this.tol[k]) this.tol[k]=z.tol; } } } }
   updateDwell(dt){ const C=CONFIG; let worst=0, md=0;
-    for(let k=0;k<this.dens.length;k++){ const d=this.dens[k]; if(d>md) md=d;
-      if(d>=C.dDanger) this.dwell[k]+=dt; else this.dwell[k]=Math.max(0,this.dwell[k]-2*dt);
+    for(let k=0;k<this.dens.length;k++){ const d=this.dens[k]; if(d>md) md=d; const eff=C.dDanger+this.tol[k];
+      if(d>=eff) this.dwell[k]+=dt; else this.dwell[k]=Math.max(0,this.dwell[k]-2*dt);
       if(this.dwell[k]>worst) worst=this.dwell[k]; }
     this.worstDwell=worst; if(md>this.worstDens) this.worstDens=md; this.curDens=md; return worst; }
 

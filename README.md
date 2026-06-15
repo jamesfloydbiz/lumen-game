@@ -24,16 +24,19 @@ bun run serve        # → http://localhost:4173
 python3 -m http.server 4173
 ```
 
-- **Place tools** by selecting one from the dock and clicking the floor. Tools cost **Credits**.
-- **Pause:** `Esc`. Tools also bind to keys `1`–`4`.
+- **Steer the Marshal** with `WASD` / arrow keys, or drag anywhere for a floating joystick.
+- **Build** by standing the Marshal on a glowing **pad** — your coins pour in until it's built/upgraded.
+- **Pause:** `Esc`.
 
-It's a **tycoon**: you earn Credits by clearing people safely, spend them on tools during an
-event, and between events spend them in a **shop** on permanent upgrades (wider/second exit,
-cheaper meters, faster crews, more reaction time). The run is a sequence of escalating events
-that **starts small** (a few dozen people — learn the heatmap) and builds to a full headliner surge.
+It's a **tycoon** (Kingshot-style): you earn **coins for every person who safely gets out**, and
+pour them into build pads to do the job better. The run is a sequence of escalating events that
+**starts small** (a few dozen people) and builds to a full headliner surge. Between events, a
+**shop** sells permanent perks (more starting coins, a faster Marshal, cheaper pads, a pre-built meter).
 
-**Tools:** Barrier (shape flow), Meter (snaps to the entry — hold people outside),
-PA: Calm / PA: Hurry (shift the crowd's urgency).
+**Build pads (the "towers"):**
+- **Entry Meter** — holds the crowd outside and lets them in at a safe rate. The key safety build.
+- **Steward Post** — organises the crowd nearby so it can safely pack denser without a crush.
+- **Widen Exit** — a wider exit passes more people per second (and lets you admit faster).
 
 ---
 

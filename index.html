@@ -10,6 +10,7 @@
 <body>
 <div id="app">
   <canvas id="game"></canvas>
+  <div id="padlabels"></div>
 
   <!-- ===== In-game HUD ===== -->
   <div id="hud" class="hud hidden">
@@ -23,8 +24,6 @@
     </div>
 
     <div id="readout" class="readout"></div>
-
-    <div id="dock" class="dock"></div>
 
     <div class="hud-heart">
       <div class="heart-bar"><div id="safetyFill" class="heart-fill"></div></div>
@@ -86,6 +85,9 @@
       <button id="againBtn" class="btn-primary">Again</button>
     </div>
   </div>
+
+  <!-- ===== Mobile joystick ===== -->
+  <div id="stick" class="stick hidden"><div id="stickNub" class="stick-nub"></div></div>
 </div>
 
 <script src="js/vendor/three.min.js"></script>
