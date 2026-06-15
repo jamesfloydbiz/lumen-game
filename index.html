@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0a14" />
-<title>LUMEN — Keeper of the Last Light</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
+<meta name="theme-color" content="#9fd86b" />
+<title>PICNIC — Hold the Line</title>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div id="app">
   <canvas id="game"></canvas>
+  <div id="padlabels"></div>
 
   <!-- ===== In-game HUD ===== -->
   <div id="hud" class="hud hidden">
@@ -31,7 +31,7 @@
 
     <div class="hud-heart">
       <div class="heart-bar"><div id="heartFill" class="heart-fill"></div></div>
-      <div class="heart-label"><span>HEARTLIGHT</span><span id="heartTxt">100%</span></div>
+      <div class="heart-label"><span>THE CAKE</span><span id="heartTxt">100%</span></div>
     </div>
 
     <div id="waveBanner" class="wave-banner"></div>
@@ -43,18 +43,18 @@
     <div class="overlay-card">
       <div class="logo">
         <span class="logo-mark"></span>
-        <h1>LUMEN</h1>
+        <h1>PICNIC</h1>
       </div>
-      <p class="tagline">Keeper of the Last Light</p>
-      <p class="blurb">The Dusk is closing in. Move through the dark, shatter it into light, and grow the Heartlight strong enough to survive <b>100 waves</b>.</p>
-      <button id="playBtn" class="btn-primary">Begin</button>
+      <p class="tagline">Hold the Line</p>
+      <p class="blurb">It's a perfect afternoon — until the ants show up. You're the ladybug on cake duty. Squish the swarm, gather the crumbs, and build a picnic fortress that survives <b>100 waves</b>.</p>
+      <button id="playBtn" class="btn-primary">Start the Picnic</button>
       <div class="hints">
         <span><kbd>WASD</kbd> / drag to move</span>
-        <span>Auto-fire at the Dusk</span>
-        <span>Stand on glowing pads to build</span>
+        <span>Auto-zap nearby bugs</span>
+        <span>Stand on pads to build</span>
       </div>
     </div>
-    <div class="credit">A self-contained light study · plays in any browser</div>
+    <div class="credit">A self-contained 3D study · plays in any browser</div>
   </div>
 
   <!-- ===== Pause screen ===== -->
@@ -62,8 +62,8 @@
     <div class="overlay-card">
       <h2>Paused</h2>
       <div class="stat-row"><span>Wave</span><b id="pWave">1</b></div>
-      <div class="stat-row"><span>Motes</span><b id="pGold">0</b></div>
-      <div class="stat-row"><span>Heartlight</span><b id="pHeart">100%</b></div>
+      <div class="stat-row"><span>Crumbs</span><b id="pGold">0</b></div>
+      <div class="stat-row"><span>The cake</span><b id="pHeart">100%</b></div>
       <button id="resumeBtn" class="btn-primary">Resume</button>
       <button id="muteBtn" class="btn-ghost">Sound: On</button>
       <button id="restartBtn" class="btn-ghost">Restart</button>
@@ -73,11 +73,11 @@
   <!-- ===== End screen ===== -->
   <div id="end" class="overlay hidden">
     <div class="overlay-card">
-      <h2 id="endTitle">The Dusk Falls</h2>
+      <h2 id="endTitle">The Ants Win</h2>
       <p id="endText" class="blurb"></p>
       <div class="stat-row"><span>Waves survived</span><b id="eWave">0</b></div>
-      <div class="stat-row"><span>Dusk shattered</span><b id="eKills">0</b></div>
-      <div class="stat-row"><span>Motes gathered</span><b id="eGold">0</b></div>
+      <div class="stat-row"><span>Bugs squished</span><b id="eKills">0</b></div>
+      <div class="stat-row"><span>Crumbs gathered</span><b id="eGold">0</b></div>
       <button id="againBtn" class="btn-primary">Again</button>
     </div>
   </div>
@@ -86,6 +86,7 @@
   <div id="stick" class="stick hidden"><div id="stickNub" class="stick-nub"></div></div>
 </div>
 
+<script src="js/vendor/three.min.js"></script>
 <script src="js/util.js"></script>
 <script src="js/config.js"></script>
 <script src="js/game.js"></script>
