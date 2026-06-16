@@ -1,18 +1,16 @@
 /* ============================================================
-   FLOW — game.js
-   Kingshot-style crowd-safety tycoon: steer the Marshal, pour coins
-   into build pads, earn coins for every person who safely gets out.
+   MONKEY BREACH — game.js
+   Move the zookeeper, auto-net the monkeys (trap, never harm),
+   pour coins into build pads, and let the wave-end truck cart the
+   trapped monkeys back to the zoo. Guard the banana pile.
    ============================================================ */
 'use strict';
 
 class Game{
   constructor(){
     this.canvas=document.getElementById('game');
-    this.owned=new Set(); this.eventIndex=0; this.coins=CONFIG.startCoins;
-    this.level=buildVenue(this.owned, EVENTS[0]);
-    this.grid=new Grid(this.level); this.sim=new Sim(this.grid,this.level);
-    this.render=new Renderer(this.canvas,this.grid,this.sim,this.level);
-    this.hero={x:0,y:-6,vx:0,vy:0,aim:-Math.PI/2,moving:false};
+    this.render=new Renderer(this.canvas,this);
+    this.hero={x:0,y:8,aim:-Math.PI/2,moving:false};
     this.input={up:false,down:false,left:false,right:false}; this.joy={active:false,ox:0,oy:0,dx:0,dy:0,id:null};
     this.phase='menu'; this.time=0; this.last=performance.now();
     this.bindUI(); this.bindInput();
@@ -20,85 +18,45 @@ class Game{
     requestAnimationFrame(t=>this.loop(t));
   }
 
-  /* ---- perks ---- */
-  padCostMul(){ return this.owned.has('cheap')?0.8:1; }
-  marshalSpeed(){ return CONFIG.marshal.speed * (this.owned.has('swift')?1.35:1); }
-  padCost(p){ return Math.round(PAD_DEFS[p.type].cost(p.level+1)*this.padCostMul()); }
-
-  beginRun(){ SFX.resume(); this.owned=new Set(); this.eventIndex=0; this.coins=CONFIG.startCoins; this.startEvent(); }
-  startEvent(){
-    const ev=EVENTS[this.eventIndex];
-    this.level=buildVenue(this.owned,ev);
-    this.grid=new Grid(this.level); this.sim=new Sim(this.grid,this.level);
-    this.render.bind(this.grid,this.sim,this.level);
-    this.hero={x:this.level.marshalStart.x,y:this.level.marshalStart.y,vx:0,vy:0,aim:-Math.PI/2,moving:false};
-    this.time=0; this.spawns=this.level.spawns.map(s=>({...s,released:0}));
-    this.toAdmit=0; this.admitAcc=0; this.queued=0; this.lastCleared=0; this.popAcc=0; this.flowEMA=0; this.surgeShown=false;
-    this.meterRate=0;
-    if(this.owned.has('coins')) this.coins+=25;
-    // pre-built meter perk
-    if(this.owned.has('premeter')){ const mp=this.level.pads.find(p=>p.type==='meter'); mp.level=1; this.applyPad(mp,true); }
-    this.phase='play';
-    ['start','end','shop','pause'].forEach(id=>document.getElementById(id).classList.add('hidden'));
-    document.getElementById('hud').classList.remove('hidden'); document.getElementById('readout').classList.add('show');
-    this.banner('EVENT '+(this.eventIndex+1), ev.name); this.toast(ev.intro); SFX.wave();
+  beginRun(){ SFX.resume(); this.coins=CONFIG.startCoins; this.bananas=CONFIG.bananas; this.wave=0;
+    this.pads=PAD_LAYOUT.map(p=>({...p,level:0,invested:0})); this.render.buildPads(this.pads);
+    this.monkeys=[]; this.nets=[]; this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.fences=[];
+    this.render.updatePile(this.bananas);
+    this.hero={x:0,y:8,aim:-Math.PI/2,moving:false};
+    ['start','end'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+    document.getElementById('hud').classList.remove('hidden');
+    this.nextWave();
   }
-
-  applyPad(p,silent){
-    if(p.type==='steward') this.rebuildStewards();
-    else if(p.type==='widen'){ this.sim.widenPinch(0.9); this.render.setExitVisual(this.sim.pinches[0].hw*2); }
-    this.recomputeMeter();
-    if(!silent) this.render.onBuild(p);
+  nextWave(){ this.wave++; if(this.wave>CONFIG.totalWaves){ this.win(); return; }
+    const w=CONFIG.waveSpec(this.wave); this.breaches=w.breaches; this.render.buildFence(w.breaches);
+    this.breachXs=CONFIG.breachXs(w.breaches);
+    this.spawnQueue=[]; const tw=w.pool.reduce((s,p)=>s+p[1],0);
+    for(let i=0;i<w.count;i++){ let r=Math.random()*tw,pick=w.pool[0][0]; for(const [k,v] of w.pool){ if((r-=v)<=0){pick=k;break;} } this.spawnQueue.push(pick); }
+    this.spawnInterval=w.interval; this.spawnTimer=1.0; this.phase='play';
+    this.fenceSealed=false;
+    this.banner('WAVE '+this.wave, this.wave===1?'Stand on a pad to build · guard the bananas':'');
+    SFX.wave();
   }
-  recomputeMeter(){ const mp=this.level.pads.find(p=>p.type==='meter'), wp=this.level.pads.find(p=>p.type==='widen');
-    this.meterRate = (mp&&mp.level>0) ? (METER_BASE_RATE + 1.2*(wp?wp.level:0)) : 0; }
-  rebuildStewards(){ const list=[]; for(const p of this.level.pads){ if(p.type==='steward'&&p.level>0){ const s=PAD_DEFS.steward.stat(p.level); list.push({x:p.x,y:p.y,r:s.r,tol:s.tol}); } } this.grid.setStewards(list); }
-
-  updateBuild(dt){ const h=this.hero;
-    for(const p of this.level.pads){ const def=PAD_DEFS[p.type]; if(p.level>=def.max) continue;
-      if(U.dist(h.x,h.y,p.x,p.y)<CONFIG.marshal.padReach && this.coins>0){
-        const cost=this.padCost(p), rate=CONFIG.marshal.drainPerSec;
-        const t=Math.min(rate*dt,this.coins,cost-p.invested); this.coins-=t; p.invested+=t;
-        if(p.invested>=cost-1e-6){ p.invested-=cost; p.level++; this.applyPad(p); SFX.build(); }
-      } }
-  }
-
-  /* ---- end / shop ---- */
-  eventCleared(){ this.phase='shop'; this.render.hidePads(); const last=this.eventIndex>=EVENTS.length-1;
-    document.getElementById('shopTitle').textContent=last?'The season is safe':'Event cleared';
-    document.getElementById('shopSub').textContent=last?'Every crowd kept out of the red. Spend what you earned, or take a bow.':`You cleared ${this.sim.cleared} people without a crush. Reinvest, then the next crowd arrives.`;
-    document.getElementById('nextBtn').textContent=last?'Finish':'Next event'; this.buildShop();
-    document.getElementById('shop').classList.remove('hidden'); SFX.win(); }
-  nextEvent(){ if(this.eventIndex>=EVENTS.length-1){ this.done(); return; } this.eventIndex++; this.startEvent(); }
-  done(){ this.phase='done'; this.render.hidePads();
-    document.getElementById('endTitle').textContent='A safe season';
-    document.getElementById('endText').textContent='Every event, every crowd, kept out of the red — by routing, not forcing.';
-    document.getElementById('eTime').textContent='—'; document.getElementById('eCleared').textContent=this.sim.cleared; document.getElementById('ePeak').textContent=this.grid.worstDens.toFixed(1)+' p/m²';
+  win(){ this.phase='over'; this.render.hidePads(); SFX.win();
+    document.getElementById('endTitle').textContent='Zoo secured'; document.getElementById('endText').textContent='Every breach held, every monkey home, the bananas safe. The keeper rests.';
+    document.getElementById('eWave').textContent=CONFIG.totalWaves; document.getElementById('eBananas').textContent=this.bananas; document.getElementById('eCoins').textContent=Math.floor(this.coins);
     document.getElementById('againBtn').textContent='New run'; document.getElementById('end').classList.remove('hidden'); }
   lose(){ if(this.phase==='over') return; this.phase='over'; this.render.hidePads(); SFX.lose();
-    document.getElementById('endTitle').textContent='A crush formed';
-    document.getElementById('endText').textContent='Density held past the crush threshold. Build the Entry Meter to hold the crowd outside — the fix is upstream, not at the jam.';
-    document.getElementById('eTime').textContent=this.clockStr(); document.getElementById('eCleared').textContent=this.sim.cleared; document.getElementById('ePeak').textContent=this.grid.worstDens.toFixed(1)+' p/m²';
+    document.getElementById('endTitle').textContent='The bananas are gone'; document.getElementById('endText').textContent='The pile was carried off through the breach. Build nets and decoys sooner, and trap the carriers before they run.';
+    document.getElementById('eWave').textContent=this.wave; document.getElementById('eBananas').textContent=0; document.getElementById('eCoins').textContent=Math.floor(this.coins);
     document.getElementById('againBtn').textContent='Try again'; document.getElementById('end').classList.remove('hidden'); }
-  togglePause(f){ if(this.phase!=='play'&&this.phase!=='pause') return; this.phase=(f===undefined?(this.phase==='play'):f)?'pause':'play'; const el=document.getElementById('pause');
-    if(this.phase==='pause'){ document.getElementById('pTime').textContent=this.clockStr(); document.getElementById('pCleared').textContent=this.sim.cleared; document.getElementById('pSafety').textContent=Math.round(this.safety()*100)+'%'; el.classList.remove('hidden'); } else el.classList.add('hidden'); }
+  togglePause(f){ if(this.phase!=='play'&&this.phase!=='pause'&&this.phase!=='truck') return; const playing=this.phase==='pause'?false:true;
+    if(f===undefined) f=this.phase!=='pause'; this._prePause=this._prePause||'play';
+    if(f){ this._prePause=this.phase; this.phase='pause'; document.getElementById('pWave').textContent=this.wave; document.getElementById('pBananas').textContent=this.bananas; document.getElementById('pCoins').textContent=Math.floor(this.coins); document.getElementById('pause').classList.remove('hidden'); }
+    else { this.phase=this._prePause||'play'; document.getElementById('pause').classList.add('hidden'); } }
 
-  buildShop(){ document.getElementById('shopCredits').textContent=Math.floor(this.coins);
-    const list=document.getElementById('shopList'); list.innerHTML='';
-    for(const u of UPGRADES){ const owned=this.owned.has(u.id), poor=!owned&&this.coins<u.cost;
-      const el=document.createElement('div'); el.className='shop-item'+(owned?' bought':'')+(poor?' poor':'');
-      el.innerHTML=`<div class="si-main"><div class="si-name">${u.name}</div><div class="si-desc">${u.desc}</div></div>`+(owned?`<div class="si-cost">OWNED</div>`:`<div class="si-cost"><span class="mote-dot"></span>${u.cost}</div>`);
-      if(!owned&&!poor) el.onclick=()=>{ this.coins-=u.cost; this.owned.add(u.id); SFX.build(); this.buildShop(); };
-      list.appendChild(el); } }
-
+  /* ---- input ---- */
   bindUI(){ const $=i=>document.getElementById(i);
-    $('playBtn').onclick=()=>this.beginRun(); $('againBtn').onclick=()=>{ if(this.phase==='done') this.beginRun(); else this.startEvent(); };
-    $('nextBtn').onclick=()=>this.nextEvent(); $('pauseBtn').onclick=()=>this.togglePause(true); $('resumeBtn').onclick=()=>this.togglePause(false);
+    $('playBtn').onclick=()=>this.beginRun(); $('againBtn').onclick=()=>this.beginRun();
+    $('pauseBtn').onclick=()=>this.togglePause(true); $('resumeBtn').onclick=()=>this.togglePause(false);
     $('restartBtn').onclick=()=>{ this.togglePause(false); this.beginRun(); };
     $('muteBtn').onclick=e=>{ const m=!SFX.isMuted(); SFX.setMuted(m); e.target.textContent='Sound: '+(m?'Off':'On'); }; }
-
-  bindInput(){
-    const keymap={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
+  bindInput(){ const keymap={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
     addEventListener('keydown',e=>{ if(e.code==='Escape'){this.togglePause();return;} if(keymap[e.code]){this.input[keymap[e.code]]=true;e.preventDefault();} });
     addEventListener('keyup',e=>{ if(keymap[e.code]) this.input[keymap[e.code]]=false; });
     const cv=this.canvas, stick=document.getElementById('stick'), nub=document.getElementById('stickNub');
@@ -110,61 +68,104 @@ class Game{
     cv.addEventListener('touchend',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) up(); } }); cv.addEventListener('touchcancel',up);
     cv.addEventListener('mousedown',e=>down(e.clientX,e.clientY,'m')); addEventListener('mousemove',e=>move(e.clientX,e.clientY)); addEventListener('mouseup',up);
   }
+  moveHero(dt){ const h=this.hero,C=CONFIG; let mx=(this.input.right?1:0)-(this.input.left?1:0), my=(this.input.down?1:0)-(this.input.up?1:0);
+    if(this.joy.active&&(this.joy.dx||this.joy.dy)){ mx=this.joy.dx; my=this.joy.dy; } const ml=Math.hypot(mx,my); if(ml>1){ mx/=ml; my/=ml; }
+    h.moving=ml>0.1; h.x=U.clamp(h.x+mx*C.hero.speed*dt,-C.worldW/2+2,C.worldW/2-2); h.y=U.clamp(h.y+my*C.hero.speed*dt,C.breachY+3,C.worldH/2-2);
+  }
 
-  moveHero(dt){ const h=this.hero,C=CONFIG;
-    let mx=(this.input.right?1:0)-(this.input.left?1:0), my=(this.input.down?1:0)-(this.input.up?1:0);
-    if(this.joy.active&&(this.joy.dx||this.joy.dy)){ mx=this.joy.dx; my=this.joy.dy; }
-    const ml=Math.hypot(mx,my); if(ml>1){ mx/=ml; my/=ml; }
-    h.moving=ml>0.1; if(h.moving) h.aim=Math.atan2(my,mx);
-    const sp=this.marshalSpeed(); let nx=h.x+mx*sp*dt, ny=h.y+my*sp*dt;
-    if(!this.grid.walkableAt(nx,ny)){ if(this.grid.walkableAt(nx,h.y)) ny=h.y; else if(this.grid.walkableAt(h.x,ny)) nx=h.x; else { nx=h.x; ny=h.y; } }
-    nx=U.clamp(nx,-C.worldW/2+1.5,C.worldW/2-1.5); ny=U.clamp(ny,-C.worldH/2+1.5,C.worldH/2-1.5);
-    h.x=nx; h.y=ny; }
+  /* ---- build pads ---- */
+  padCost(p){ return CONFIG.pads[p.type].cost(p.level+1); }
+  updateBuild(dt){ const h=this.hero; for(const p of this.pads){ const def=CONFIG.pads[p.type]; if(p.level>=def.max) continue;
+    if(U.dist(h.x,h.y,p.x,p.y)<CONFIG.hero.padReach && this.coins>0){ const cost=this.padCost(p), t=Math.min(CONFIG.hero.drainPerSec*dt,this.coins,cost-p.invested); this.coins-=t; p.invested+=t;
+      if(p.invested>=cost-1e-6){ p.invested-=cost; p.level++; this.applyPad(p); SFX.build(); } } } }
+  applyPad(p){ this.render.onBuild(p); this.rebuildTowers(); }
+  rebuildTowers(){ this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.fences=[];
+    for(const p of this.pads){ if(p.level<1) continue; const s=CONFIG.pads[p.type].stat(p.level);
+      if(p.type==='net') this.netTowers.push({x:p.x,y:p.y,range:s.range,rate:s.rate,cd:0});
+      else if(p.type==='decoy') this.decoys.push({x:p.x,y:p.y,pull:s.pull});
+      else if(p.type==='cage') this.cages.push({x:p.x,y:p.y,r:s.r,cd:s.cd,timer:0});
+      else if(p.type==='mud') this.muds.push({x:p.x,y:p.y,r:s.r,slow:s.slow});
+      else if(p.type==='fence') this.fences.push({x:p.x,y:p.y,dur:s.dur,cd:s.cd,timer:0,on:false}); }
+  }
 
-  /* ---- arrivals -> outside queue -> metered admission ---- */
-  releaseSpawns(){ for(const s of this.spawns){ if(this.time<s.t) continue;
-    const elapsed=Math.min(this.time,s.t+s.over)-s.t, want=Math.floor(elapsed/s.over*s.count);
-    if(want>s.released){ this.toAdmit+=(want-s.released); s.released=want; }
-    if(s.count>200&&this.time>=s.t&&!this.surgeShown){ this.surgeShown=true; this.banner('THE SURGE','Hold them outside — build the Entry Meter'); SFX.boss(); } } }
-  admit(dt){ const e=this.level.entry,g=this.grid; const rate=this.meterRate>0?this.meterRate:1e9;
-    this.admitAcc+=Math.min(this.toAdmit,rate*dt);
-    while(this.admitAcc>=1&&this.toAdmit>=1){ let x,y,t=0; do{ x=e.x+U.rand(-e.w/2,e.w/2); y=e.y+U.rand(0,2); t++; }while(!g.walkableAt(x,y)&&t<8); this.sim.add(x,y); this.admitAcc-=1; this.toAdmit-=1; }
-    this.queued=Math.floor(this.toAdmit); }
-  allCleared(){ return this.spawns.every(s=>s.released>=s.count)&&this.toAdmit<1&&this.sim.n===0; }
+  /* ---- monkeys ---- */
+  spawn(type){ const def=CONFIG.monkeys[type]; const bx=U.choice(this.breachXs);
+    this.monkeys.push({type,def,x:bx+U.rand(-3,3),y:CONFIG.breachY,state:'incoming',carrying:false,netHits:0,grabT:0,wob:U.rand(TAU),struggle:0,face:Math.PI/2,target:null,mesh:null}); }
+  assignTarget(m){ if(this.decoys.length && !m.def.decoyProof){ let best=null,bd=1e9; for(const d of this.decoys){ const dd=U.dist2(m.x,m.y,d.x,d.y); if(dd<bd){bd=dd;best=d;} } m.target={x:best.x,y:best.y,kind:'decoy'}; }
+    else m.target={x:CONFIG.pile.x,y:CONFIG.pile.y,kind:'pile'}; }
+  nearestBreach(x){ let best=this.breachXs[0],bd=1e9; for(const bx of this.breachXs){ const d=Math.abs(bx-x); if(d<bd){bd=d;best=bx;} } return best; }
+  mudFactor(x,y){ let f=1; for(const z of this.muds){ if(U.dist2(x,y,z.x,z.y)<z.r*z.r) f=Math.min(f,z.slow); } return f; }
 
-  update(dt){
-    this.time+=dt; this.moveHero(dt); this.updateBuild(dt);
-    this.releaseSpawns(); this.admit(dt); this.sim.step(dt); this.grid.updateDwell(dt);
-    const d=this.sim.cleared-this.lastCleared; this.flowEMA=(this.flowEMA||0)*0.93+(d/dt)*0.07; this.lastCleared=this.sim.cleared;
-    if(d>0){ this.coins+=d*CONFIG.earnPerClear; this.popAcc+=d; while(this.popAcc>=3){ this.popAcc-=3; this.render.coinPop(this.level.goal.x+U.rand(-1.5,1.5), this.level.goal.y); } }
-    if(this.grid.worstDwell>=CONFIG.dwellFail){ this.lose(); return; }
-    if(this.time>=this.level.duration||this.allCleared()){ this.eventCleared(); return; }
+  updateMonkeys(dt){ const list=this.monkeys;
+    for(let i=list.length-1;i>=0;i--){ const m=list[i]; m.wob+=dt*9;
+      if(m.state==='trapped'){ m.struggle+=dt*7; continue; }
+      if(!m.target) this.assignTarget(m);
+      const spd=m.def.speed*this.mudFactor(m.x,m.y);
+      if(m.state==='incoming'){
+        const tx=m.target.x,ty=m.target.y, d=U.dist(m.x,m.y,tx,ty); m.face=U.ang(m.x,m.y,tx,ty);
+        if(d<2.4){ m.state='grab'; m.grabT=m.def.grab; }
+        else { m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt; }
+      } else if(m.state==='grab'){
+        m.grabT-=dt; if(m.grabT<=0){ if(m.target.kind==='pile'){ if(this.bananas>0){ this.bananas--; this.render.updatePile(this.bananas); m.carrying=true; if(this.bananas<=0){ this.lose(); } } }
+          m.state='fleeing'; const bx=this.nearestBreach(m.x); m.flee={x:bx,y:CONFIG.breachY}; }
+      } else if(m.state==='fleeing'){
+        const tx=m.flee.x,ty=m.flee.y; m.face=U.ang(m.x,m.y,tx,ty); m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt;
+        if(m.y<=CONFIG.breachY+1){ // escaped — carried banana is lost for good
+          this.render.removeMonkeyMesh(m); list.splice(i,1); }
+      }
+      // cage traps
+      for(const c of this.cages){ if(c.timer<=0 && m.state!=='trapped' && U.dist2(m.x,m.y,c.x,c.y)<c.r*c.r){ this.trap(m); c.timer=c.cd; this.render.burst(c.x,c.y,ACCENT.net); } }
+    }
+    for(const c of this.cages) c.timer=Math.max(0,c.timer-dt);
+  }
+  trap(m){ m.state='trapped'; m.netHits=m.def.nets; }
+  hitNet(m){ m.netHits++; if(m.netHits>=m.def.nets) this.trap(m); }
+
+  activeMonkeys(){ let n=0; for(const m of this.monkeys) if(m.state!=='trapped') n++; return n; }
+  nearestActive(x,y,range){ let best=null,bd=range*range; for(const m of this.monkeys){ if(m.state==='trapped') continue; const d=U.dist2(x,y,m.x,m.y); if(d<bd){bd=d;best=m;} } return best; }
+
+  fireNet(x,y,target){ const a=U.ang(x,y,target.x,target.y); this.nets.push({x,y,vx:Math.cos(a)*CONFIG.hero.netSpeed,vy:Math.sin(a)*CONFIG.hero.netSpeed,target,life:1.2}); SFX.shoot(); }
+  updateNets(dt){ for(let i=this.nets.length-1;i>=0;i--){ const n=this.nets[i]; n.x+=n.vx*dt; n.y+=n.vy*dt; n.life-=dt; const t=n.target;
+    if(!t || t.state==='trapped' || U.dist(n.x,n.y,t.x,t.y)<1.8){ if(t && t.state!=='trapped' && U.dist(n.x,n.y,t.x,t.y)<2.6) this.hitNet(t); this.nets.splice(i,1); continue; }
+    if(n.life<=0){ this.nets.splice(i,1); } } }
+  updateTowers(dt){ for(const tw of this.netTowers){ tw.cd-=dt; if(tw.cd<=0){ const m=this.nearestActive(tw.x,tw.y,tw.range); if(m){ tw.cd=1/tw.rate; this.fireNet(tw.x,tw.y,m); } } } }
+
+  /* ---- truck (wave end) ---- */
+  startTruck(){ this.phase='truck'; this.truck={stage:'in',x:this.breachXs[0]||0,y:CONFIG.breachY,t:0,loadT:0,paid:0}; SFX.turret(); }
+  updateTruck(dt){ const tr=this.truck;
+    if(tr.stage==='in'){ tr.y=U.approach(tr.y,10,18,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y>=9.5) tr.stage='load';
+    } else if(tr.stage==='load'){ this.render.setTruck(true,tr.x,tr.y,0); tr.loadT-=dt;
+      if(tr.loadT<=0){ const m=this.monkeys.find(mm=>mm.state==='trapped'); if(m){ this.coins+=m.def.bounty; if(m.carrying){ this.bananas++; this.render.updatePile(this.bananas); } this.render.coinPop(tr.x,tr.y+3); this.render.removeMonkeyMesh(m); this.monkeys.splice(this.monkeys.indexOf(m),1); tr.loadT=0.22; SFX.pickup(); }
+        else tr.stage='out'; }
+    } else { tr.y=U.approach(tr.y,CONFIG.breachY-14,22,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y<=CONFIG.breachY-13){ this.render.setTruck(false); this.endTruck(); } }
+  }
+  endTruck(){ this.monkeys=this.monkeys.filter(m=>{ if(m.state!=='trapped'){ return true; } this.render.removeMonkeyMesh(m); return false; }); this.nextWave(); }
+
+  /* ---- loop ---- */
+  update(dt){ this.time+=dt; this.moveHero(dt); this.updateBuild(dt);
+    if(this.phase==='truck'){ this.updateTruck(dt); return; }
+    // spawn
+    if(this.spawnQueue.length){ this.spawnTimer-=dt; if(this.spawnTimer<=0){ this.spawn(this.spawnQueue.shift()); this.spawnTimer=this.spawnInterval; } }
+    this.updateMonkeys(dt); this.updateTowers(dt); this.updateNets(dt);
+    // hero auto-net
+    this.hero.cd=(this.hero.cd||0)-dt; const tgt=this.nearestActive(this.hero.x,this.hero.y,CONFIG.hero.netRange);
+    if(tgt){ this.hero.aim=U.ang(this.hero.x,this.hero.y,tgt.x,tgt.y); if(this.hero.cd<=0){ this.hero.cd=1/CONFIG.hero.netRate; this.fireNet(this.hero.x,this.hero.y,tgt); } }
+    if(this.bananas<=0){ this.lose(); return; }
+    // wave end -> truck
+    if(this.spawnQueue.length===0 && this.activeMonkeys()===0){ if(this.monkeys.length) this.startTruck(); else this.nextWave(); }
     this.syncHUD();
   }
-  safety(){ return U.clamp(1-this.grid.worstDwell/CONFIG.dwellFail,0,1); }
-  clockStr(){ const t=Math.floor(this.time); return Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); }
-  syncHUD(){ const C=CONFIG;
-    document.getElementById('clock').textContent=this.clockStr();
-    document.getElementById('cleared').textContent=this.sim.cleared;
-    document.getElementById('credits').textContent=Math.floor(this.coins);
-    const s=this.safety(); const f=document.getElementById('safetyFill'); f.style.width=(s*100)+'%';
-    f.style.background=s<0.34?'linear-gradient(90deg,#ff4d3a,#ff9a86)':'linear-gradient(90deg,var(--gold),var(--gold-soft))';
-    document.getElementById('safetyTxt').textContent=Math.round(s*100)+'%';
-    const peak=this.grid.curDens||0, warn=peak>=C.dDanger;
-    const q=this.queued>0?` · <span style="color:var(--ink-dim)">queued outside ${this.queued}</span>`:'';
-    document.getElementById('readout').innerHTML=`clearing <b>${(this.flowEMA||0).toFixed(1)}/s</b> · peak density <span class="${warn?'warn':''}" style="${warn?'':(peak>=C.dCrit?'color:#ffb86a':'')}">${peak.toFixed(1)} p/m²</span>${q}`;
-  }
-  banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span><span class="wb-n">${n}</span>`; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
-  toast(msg){ const t=document.getElementById('toast'); t.innerHTML=msg; t.classList.add('show'); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove('show'),2800); }
+  syncHUD(){ document.getElementById('waveNum').textContent=this.wave; document.getElementById('bananaNum').textContent=this.bananas; document.getElementById('coinNum').textContent=Math.floor(this.coins); }
+  banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span>`+(n?`<span class="wb-s">${n}</span>`:''); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
 
   loop(now){ let dt=(now-this.last)/1000; this.last=now; if(dt>0.033) dt=0.033;
-    if(this.phase==='play') this.update(dt);
+    if(this.phase==='play'||this.phase==='truck') this.update(dt);
     const t=this.time;
-    this.render.syncHeat(); this.render.syncCrowd(); this.render.syncMarshal(this.hero,t);
-    if(this.phase==='play') this.render.updatePads(this,t); this.render.updateFx(dt);
-    this.render.draw();
+    if(this.monkeys) this.render.syncMonkeys(this.monkeys);
+    this.render.syncNets(this.nets||[]); this.render.syncHero(this.hero,t);
+    if(this.pads && this.phase!=='over'&&this.phase!=='menu') this.render.updatePads(this,t); else this.render.hidePads();
+    this.render.updateFx(dt); this.render.draw();
     requestAnimationFrame(t2=>this.loop(t2));
   }
 }
-
 window.addEventListener('load',()=>{ window.game=new Game(); });

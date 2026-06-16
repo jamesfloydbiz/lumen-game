@@ -1,92 +1,66 @@
 /* ============================================================
-   FLOW — config.js
-   Crowd-safety TYCOON, Kingshot-style: you steer a Marshal around
-   the venue and pour coins into build pads. Coins are earned for
-   every person who safely gets out. Units: METERS, SECONDS;
-   density = persons/m².
+   MONKEY BREACH — config.js
+   Zoo-breach defense (Kingshot loop). Guard the banana pile from
+   escaping monkeys: trap them with nets (never harm), and at the
+   end of each wave a truck loads the trapped ones back to the zoo.
+   Units: meters / seconds. Field centred at origin; breach at top
+   (−y), banana pile at the bottom (+y).
    ============================================================ */
 'use strict';
 
 const CONFIG = {
-  worldW: 36, worldH: 52, cell: 1,
+  worldW: 48, worldH: 76,
 
-  dSafe:2.0, dCrit:4.0, dDanger:5.0, dJam:7.0, dwellFail:4.0,
+  bananas: 24,                  // the core — lose when it hits 0
+  pile: {x:0, y:26},
+  breachY: -34,                 // fence line / spawn
+  breachXs(b){ return b===1?[0] : b===2?[-11,11] : [-15,0,15]; },
 
-  v0:1.34, tau:0.5, rNeighbor:0.7, kRep:1.4, kWall:2.2, agentR:0.22,
-  Js:1.3,
-  fdGate(d){ const C=CONFIG; if(d<=C.dCrit) return d/C.dCrit; return Math.max(0.16, 1-0.55*(d-C.dCrit)/(C.dJam-C.dCrit)); },
-  speedFactor(d){ return Math.max(0, 1-d/CONFIG.dJam); },
-  clogK:0.85, widthMin:0.6,
-  urgencyCalm:0.7, urgencyHurry:1.5, urgencyBase:1.0,
+  hero: { speed:13, netRange:17, netRate:1.6, netSpeed:34, radius:1.4, drainPerSec:7, padReach:3.4 },
+  startCoins: 6,
 
-  // the Marshal (the character you move)
-  marshal:{ speed:10.5, radius:1.1, drainPerSec:26, padReach:3.2 },
+  // monkey archetypes
+  monkeys: {
+    normal: { speed:6.0,  nets:1, bounty:3, grab:0.6, r:1.3, hex:0x8a5a2e, name:'Monkey' },
+    fast:   { speed:9.5,  nets:1, bounty:3, grab:0.35,r:1.1, hex:0xb5793a, name:'Quick' },
+    alpha:  { speed:4.6,  nets:2, bounty:8, grab:0.8, r:2.0, hex:0x5a3a1e, name:'Alpha' },
+    bold:   { speed:7.0,  nets:1, bounty:5, grab:0.5, r:1.3, hex:0x9a4a2a, name:'Bold', decoyProof:true },
+  },
 
-  // economy — ONE currency (coins). Earn per person safely cleared.
-  startCoins:36,
-  earnPerClear:0.7,
+  // wave schedule
+  totalWaves: 12,
+  waveSpec(n){
+    const count = 5 + Math.round(n*2.6);
+    const interval = Math.max(0.45, 1.5 - n*0.09);
+    const pool=[['normal',1]];
+    if(n>=3) pool.push(['fast',0.6]);
+    if(n>=5) pool.push(['alpha',0.3]);
+    if(n>=7) pool.push(['bold',0.5]);
+    if(n>=9) pool.push(['fast',0.8]);
+    return {count, interval, pool, breaches: n>=8?3 : n>=4?2 : 1};
+  },
 
-  heat:[
-    {d:0.0,h:42,s:65,l:3},{d:1.5,h:44,s:88,l:26},{d:3.0,h:40,s:92,l:42},
-    {d:4.0,h:30,s:96,l:50},{d:5.0,h:12,s:99,l:50},{d:7.0,h:0,s:98,l:52},
-  ],
+  // build pads (the "towers") — stand on one and pour coins in
+  pads: {
+    net:   { name:'Net Tower',   accent:'net',  max:3, cost:(lv)=>[5,12,22][lv-1],
+             stat:(lv)=>({range:13+lv*2.5, rate:0.9+lv*0.45}), blurb:'Auto-fires nets down its lane.' },
+    decoy: { name:'Banana Decoy', accent:'gold', max:2, cost:(lv)=>[10,20][lv-1],
+             stat:(lv)=>({pull:16+lv*7}), blurb:'A fake pile — monkeys grab it and flee empty-handed.' },
+    cage:  { name:'Cage Trap',   accent:'net',  max:3, cost:(lv)=>[15,28,45][lv-1],
+             stat:(lv)=>({r:3.5+lv*0.8, cd:Math.max(1.4,3.8-lv*0.8)}), blurb:'Auto-catches monkeys that cross it.' },
+    mud:   { name:'Mud Patch',   accent:'mud',  max:2, cost:(lv)=>[10,18][lv-1],
+             stat:(lv)=>({slow:0.55-lv*0.13, r:6+lv*2}), blurb:'Slows monkeys crossing it — more net shots land.' },
+    fence: { name:'Fence Patch', accent:'wood', max:2, cost:(lv)=>[20,35][lv-1],
+             stat:(lv)=>({dur:5+lv*3, cd:13}), blurb:'Seals a breach for a few seconds. Not permanent.' },
+  },
 };
 
-/* ---- build pads: the "towers" you fund by standing on them ----
-   Each pad has tiers; cost(lv) is the coins for the NEXT level.   */
-const PAD_DEFS = {
-  meter:  { id:'meter',  name:'Entry Meter', accent:'water', max:1,
-            cost:(lv)=>[34][lv-1],
-            stat:(lv)=>({}),
-            blurb:'Hold the crowd outside and let them in at a safe rate.' },
-  steward:{ id:'steward', name:'Steward Post', accent:'gold', max:3,
-            cost:(lv)=>[22,38,58][lv-1],
-            stat:(lv)=>({ r:9+lv*3, tol:lv*0.9 }),           // organised crowds stay safe at higher density
-            blurb:'Stewards organise the crowd — it can pack denser here without a crush.' },
-  widen:  { id:'widen',  name:'Widen Exit', accent:'water', max:3,
-            cost:(lv)=>[40,65,95][lv-1],
-            stat:(lv)=>({ add:0.9, rate:1.2 }),             // +width AND +safe admission per level
-            blurb:'A wider exit passes more — and lets you admit faster.' },
-};
-const METER_BASE_RATE = 3.0;   // safe admission once the meter is built (+widen bonus)
-
-/* ---- the run: escalating events (starts SMALL) ---- */
-const EVENTS = [
-  {name:'Doors · a small show', intro:'A few guests trickle out. Steer the Marshal onto a pad and pour coins in to build it.', trickle:35, surge:40, surgeOver:13, duration:46},
-  {name:'Friday night',         intro:'Bigger crowd. Build the Entry Meter to hold them outside before they mass.',           trickle:90, surge:240, surgeOver:13, duration:62},
-  {name:'Sold out',             intro:'A real surge. Posts calm the queue; a wider exit clears it faster.',                   trickle:130, surge:520, surgeOver:14, duration:72},
-  {name:'The headliner',        intro:'Everyone leaves at once. This is the whole job.',                                      trickle:160, surge:780, surgeOver:15, duration:78},
+/* pad layout (meters). Breach at top, pile at bottom; lane is the middle. */
+const PAD_LAYOUT = [
+  {type:'net',   x:-9,  y:-6,  level:0, invested:0},
+  {type:'net',   x:9,   y:-6,  level:0, invested:0},
+  {type:'cage',  x:0,   y:-16, level:0, invested:0},
+  {type:'decoy', x:-12, y:10,  level:0, invested:0},
+  {type:'mud',   x:9,   y:4,   level:0, invested:0},
+  {type:'fence', x:0,   y:-30, level:0, invested:0},
 ];
-
-/* ---- permanent perks (bought between events with coins) ---- */
-const UPGRADES = [
-  {id:'coins',    name:'City Grant',     cost:40,  desc:'+25 starting coins each event.'},
-  {id:'swift',    name:'Radio & Bike',   cost:45,  desc:'The Marshal moves faster.'},
-  {id:'cheap',    name:'Volunteer Corps', cost:55, desc:'Every build pad costs 20% less.'},
-  {id:'premeter', name:'Standing Orders', cost:75, desc:'Start each event with the Entry Meter already built.'},
-];
-
-/* ---- venue builder + its build pads (positions in meters) ---- */
-function buildVenue(owned, ev){
-  const exitW = 3.4;     // base; widened live via the Widen pad
-  const walls=[
-    {x:0,y:-25,w:33,h:1.6},{x:0,y:25,w:33,h:1.6},
-    {x:-15.8,y:0,w:1.6,h:52},{x:15.8,y:0,w:1.6,h:52},
-    {x:-9.05,y:8,w:12.5,h:1.6},{x:9.05,y:8,w:12.5,h:1.6},   // divider, 3.4m gap at x=0
-  ];
-  return {
-    id:'concert', name:ev.name, intro:ev.intro, walls,
-    pinches:[{x:0,y:8,w:exitW}],
-    goal:{x:0,y:18}, goalR:3.0,
-    entry:{x:0,y:-23,w:26}, entryMeterY:-16,
-    marshalStart:{x:0,y:-6},
-    pads:[
-      {type:'meter',   x:0,   y:-19, level:0, invested:0},
-      {type:'steward', x:0,   y:2.5, level:0, invested:0},   // relieves the convergence above the exit
-      {type:'steward', x:-9,  y:-4,  level:0, invested:0},   // calms the concourse
-      {type:'widen',   x:7,   y:3,   level:0, invested:0},
-    ],
-    spawns:[ {t:0,count:ev.trickle,over:9}, {t:9,count:ev.surge,over:ev.surgeOver||13} ],
-    duration: ev.duration||70,
-  };
-}
