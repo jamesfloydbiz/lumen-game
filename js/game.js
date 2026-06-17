@@ -24,7 +24,7 @@ class Game{
   /* ---- run lifecycle ---- */
   beginRun(){ SFX.resume(); const C=CONFIG;
     this.bananas=C.bananas; this.wave=0; this.ecoRate=0; this._frontiers=[];   // bananas = the one resource (treasury + lives)
-    this.unlocked=new Set(C.startUnlocks); this.tool=null;
+    this.unlocked=new Set(C.startUnlocks); this.tool=null; this.sellMode=false;
     this.structures=[]; this.wallBlocks=[];
     this.monkeys=[]; this.nets=[]; this.trainees=[];
     this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[];
@@ -43,7 +43,7 @@ class Game{
       el.innerHTML=`<span class="tc-name">${def.name}</span><span class="tc-cost"><span class="banana-dot sm"></span>${def.cost(1)}</span>`;
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
-  selectTool(type){ if(!this.unlocked.has(type)) return; this.tool = (this.tool===type)?null:type; }
+  selectTool(type){ if(!this.unlocked.has(type)) return; this.sellMode=false; this.tool = (this.tool===type)?null:type; }
   ghostPos(){ const s=(this.tool&&CONFIG.build[this.tool]&&CONFIG.build[this.tool].snap)||CONFIG.snap; if(this.tool && this.aimPt) return {x:Math.round(this.aimPt.x/s)*s, y:Math.round(this.aimPt.y/s)*s};
     const a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
     return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
@@ -72,19 +72,22 @@ class Game{
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
   doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost) return;
     this.bananas-=cost; this.render.updateCore(Math.floor(this.bananas)); s.level++; s._dirty=true; this.rebuildDerived(); SFX.build(); }
-  /* ---- sell / refund (stand on a building or wall, get ~60% back) ---- */
-  sellTarget(){ if(this.tool) return null; const h=this.hero; let best=null,bd=CONFIG.hero.buildReach,kind=null;
-    for(const s of this.structures){ const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;kind='struct';} }
-    for(const w of this.wallBlocks){ const d=U.dist(h.x,h.y,w.x,w.y); if(d<bd){bd=d;best=w;kind='wall';} }
+  /* ---- sell / refund (Sell MODE: tap Sell, then tap the build to remove — target = nearest build to the cursor, ~60% back) ---- */
+  built(){ return this.structures.length+this.wallBlocks.length; }
+  sellTargetAt(pt){ if(!pt) return null; let best=null,bd=49,kind=null;   // within 7m of the cursor
+    for(const s of this.structures){ const d=U.dist2(pt.x,pt.y,s.x,s.y); if(d<bd){bd=d;best=s;kind='struct';} }
+    for(const w of this.wallBlocks){ const d=U.dist2(pt.x,pt.y,w.x,w.y); if(d<bd){bd=d;best=w;kind='wall';} }
     return best?{obj:best,kind}:null; }
+  sellAtAim(){ const t=this.sellTargetAt(this.aimPt); if(!t){ this.toast('Tap a building to sell it'); SFX.hurt(); return; } this.doSell(t); }
   sellValue(t){ if(t.kind==='wall') return Math.max(1,Math.round(CONFIG.build.wall.cost()*0.6)); const def=CONFIG.build[t.obj.type]; let tot=0; for(let l=1;l<=t.obj.level;l++) tot+=def.cost(l); return Math.max(1,Math.round(tot*0.6)); }
   /* ---- clear brush (chop the nearest tree/rock so you can build there — free, no banana reward to avoid a money fountain) ---- */
   clearTarget(){ const h=this.hero, cols=this.render.colliders; if(!cols||!cols.length) return null; let best=null,bd=CONFIG.hero.buildReach;
     for(const c of cols){ const d=U.dist(h.x,h.y,c.x,c.y)-c.r; if(d<bd){bd=d;best=c;} } return best; }
   doClear(){ const c=this.clearTarget(); if(!c) return; const p=this.render.clearPropAt(c.x,c.y); if(p){ this.render.burst(p.x,p.y,0x9ad24a); this.toast('Cleared'); SFX.pickup(); } }
-  doSell(){ const t=this.sellTarget(); if(!t) return; const refund=this.sellValue(t); this.bananas+=refund;
+  doSell(t){ if(!t) return; const refund=this.sellValue(t); this.bananas+=refund;
     if(t.kind==='wall'){ const w=t.obj; if(w.mesh){ this.render.wallGroup.remove(w.mesh); this.render.disposeGroup(w.mesh); } this.wallBlocks.splice(this.wallBlocks.indexOf(w),1); }
     else { const s=t.obj; if(s._claw){ this.render.clawGroup.remove(s._claw.grp); this.render.disposeGroup(s._claw.grp); s._claw=null; } if(s.mesh){ this.render.structGroup.remove(s.mesh); this.render.disposeGroup(s.mesh); } this.structures.splice(this.structures.indexOf(s),1); this.rebuildDerived(); }
+    if(!this.built()) this.sellMode=false;   // nothing left to sell
     this.render.drawTerritory(this); this.render.drawSupply(this); this.render.updateCore(Math.floor(this.bananas)); this.toast('Sold · +'+refund); SFX.pickup(); }
 
   rebuildDerived(){ this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[]; this.trainees=[]; this.ecoRate=0;
@@ -158,17 +161,19 @@ class Game{
     $('pauseBtn').onclick=()=>this.togglePause(true); $('resumeBtn').onclick=()=>this.togglePause(false);
     $('restartBtn').onclick=()=>{ this.togglePause(false); this.beginRun(); };
     $('muteBtn').onclick=e=>{ const m=!SFX.isMuted(); SFX.setMuted(m); e.target.textContent='Sound: '+(m?'Off':'On'); };
-    $('buildBtn').onclick=()=>this.placeTool(); $('upgradeBtn').onclick=()=>this.doUpgrade(); $('sellBtn').onclick=()=>this.doSell(); $('clearBtn').onclick=()=>this.doClear(); $('cancelBtn').onclick=()=>{ this.tool=null; }; }
+    $('buildBtn').onclick=()=>this.placeTool(); $('upgradeBtn').onclick=()=>this.doUpgrade(); $('clearBtn').onclick=()=>this.doClear();
+    $('sellBtn').onclick=()=>{ if(!this.sellMode && !this.built()) return; this.sellMode=!this.sellMode; if(this.sellMode){ this.tool=null; this.toast('Sell mode — tap a building to remove it'); } else this.render.setSellGhost(null); };
+    $('cancelBtn').onclick=()=>{ this.tool=null; this.sellMode=false; this.render.setSellGhost(null); }; }
   bindInput(){ const keymap={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
     addEventListener('keydown',e=>{ if(e.code==='Escape'){this.togglePause();return;} if(e.code==='Space'){ if(this.tool) this.placeTool(); else this.doUpgrade(); e.preventDefault(); return; } if(keymap[e.code]){this.input[keymap[e.code]]=true;e.preventDefault();} });
     addEventListener('keyup',e=>{ if(keymap[e.code]) this.input[keymap[e.code]]=false; });
     const cv=this.canvas, stick=document.getElementById('stick'), nub=document.getElementById('stickNub');
     const fromUI=t=>{ let el=t.target; while(el){ if(el.id==='build'||el.id==='hud'||el.classList&&el.classList.contains('overlay')) return true; el=el.parentElement; } return false; };
-    const setAim=(px,py)=>{ if(this.tool) this.aimPt=this.render.screenToWorld(px,py); };  // ghost follows cursor/finger
+    const setAim=(px,py)=>{ if(this.tool||this.sellMode) this.aimPt=this.render.screenToWorld(px,py); };  // ghost / sell-target follows cursor/finger
     const down=(px,py,id)=>{ this.joy.active=true; this.joy.id=id; this.joy.ox=px; this.joy.oy=py; this.joy.dx=0; this.joy.dy=0; stick.style.left=px+'px'; stick.style.top=py+'px'; stick.classList.remove('hidden'); nub.style.transform='translate(-50%,-50%)';
       this._tap={x:px,y:py,moved:false}; setAim(px,py); };
     const move=(px,py)=>{ if(this._tap && Math.hypot(px-this._tap.x,py-this._tap.y)>11) this._tap.moved=true; if(!this.joy.active) return; let dx=px-this.joy.ox,dy=py-this.joy.oy; const max=54,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} this.joy.dx=dx/max; this.joy.dy=dy/max; nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`; };
-    const up=()=>{ if(this._tap && !this._tap.moved && (this.phase==='play'||this.phase==='truck')){ if(this.tool) this.placeTool(); else this.toast('Pick a tool to build'); } this._tap=null;
+    const up=()=>{ if(this._tap && !this._tap.moved && (this.phase==='play'||this.phase==='truck')){ if(this.sellMode) this.sellAtAim(); else if(this.tool) this.placeTool(); else this.toast('Pick a tool to build'); } this._tap=null;
       this.joy.active=false; this.joy.dx=0; this.joy.dy=0; stick.classList.add('hidden'); };
     cv.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; down(t.clientX,t.clientY,t.identifier); e.preventDefault(); },{passive:false});
     cv.addEventListener('touchmove',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) move(t.clientX,t.clientY); } e.preventDefault(); },{passive:false});
@@ -183,7 +188,8 @@ class Game{
     const wading=this.inWater(h.x,h.y) && Math.abs(h.y)>C.water.bridgeHalf;   // off-bridge crossing is slow, not blocked
     const spd=C.hero.speed*(wading?C.waterSlow:1), lim=C.worldClamp;
     h.x=U.clamp(h.x+mx*spd*dt,-lim,lim); h.y=U.clamp(h.y+my*spd*dt,-lim,lim);
-    this.collideProps(h);   // trees & rocks are solid; the keeper passes through his OWN walls (walls block monkeys, not you)
+    this.collideProps(h);   // trees, rocks & bushes are solid scenery
+    this.collideWalls(h, C.hero.radius);   // walls are solid to the keeper too — leave gaps to get through your own base
   }
 
   // push the keeper out of streamed scenery (trees, rocks) so the world feels physical
@@ -236,9 +242,12 @@ class Game{
     if(n.life<=0) this.nets.splice(i,1); } }
   updateTowers(dt){ for(const tw of this.netTowers){ tw.cd-=dt; if(tw.cd<=0){ const m=this.nearestActive(tw.x,tw.y,tw.range); if(m){ tw.cd=1/tw.rate; this.fireNet(tw.x,tw.y,m); } } } }
   updateTrainees(dt){ for(const k of this.trainees){ k.wob+=dt*8; k.cd-=dt;
-    const m=this.nearestActive(k.x,k.y,k.range);
-    if(m){ k.aim=U.ang(k.x,k.y,m.x,m.y); k.tx=U.lerp(k.x,m.x,0.5); k.ty=U.lerp(k.y,m.y,0.5); if(k.cd<=0){ k.cd=1/k.rate; this.fireNet(k.x,k.y,m); } }
-    else { k.roamT-=dt; if(k.roamT<=0){ k.roamT=U.rand(1.2,2.6); const a=U.rand(TAU),r=U.rand(0,6); k.tx=k.hx+Math.cos(a)*r; k.ty=k.hy+Math.sin(a)*r; } }
+    // only engage monkeys near HOME, and never chase beyond the leash — keepers defend their tent's zone instead of all stampeding to one spawn
+    const leash=k.range, m=this.nearestActive(k.hx,k.hy,leash);
+    if(m){ k.aim=U.ang(k.x,k.y,m.x,m.y); let tx=U.lerp(k.x,m.x,0.5), ty=U.lerp(k.y,m.y,0.5);
+      const hd=U.dist(tx,ty,k.hx,k.hy); if(hd>leash){ const a=U.ang(k.hx,k.hy,tx,ty); tx=k.hx+Math.cos(a)*leash; ty=k.hy+Math.sin(a)*leash; }
+      k.tx=tx; k.ty=ty; if(k.cd<=0 && U.dist2(k.x,k.y,m.x,m.y)<k.range*k.range){ k.cd=1/k.rate; this.fireNet(k.x,k.y,m); } }
+    else { k.roamT-=dt; if(k.roamT<=0){ k.roamT=U.rand(1.2,2.6); const a=U.rand(TAU),r=U.rand(0,4.5); k.tx=k.hx+Math.cos(a)*r; k.ty=k.hy+Math.sin(a)*r; } }
     const d=U.dist(k.x,k.y,k.tx,k.ty); k.moving=d>0.4; if(k.moving){ const a=U.ang(k.x,k.y,k.tx,k.ty); k.x+=Math.cos(a)*k.speed*dt; k.y+=Math.sin(a)*k.speed*dt; if(!m) k.aim=a; } } }
 
   /* ---- truck (wave end) ---- */
@@ -273,13 +282,16 @@ class Game{
     for(const type in this.chips){ const el=this.chips[type], def=C.build[type], locked=!this.unlocked.has(type), poor=this.bananas<def.cost(1);
       el.classList.toggle('locked',locked); el.classList.toggle('poor',!locked&&poor); el.classList.toggle('sel',this.tool===type); }
     const bb=document.getElementById('buildBtn'), ub=document.getElementById('upgradeBtn'), cb=document.getElementById('cancelBtn'), sb=document.getElementById('sellBtn'), clb=document.getElementById('clearBtn');
-    if(this.tool){ const gp=this.ghostPos(), err=this.placeError(this.tool,gp.x,gp.y); bb.classList.remove('hidden'); cb.classList.remove('hidden'); ub.classList.add('hidden'); sb.classList.add('hidden');
-      bb.classList.toggle('off',!!err); bb.innerHTML = err ? `<span class="why">${err}</span>` : `Build <b>${C.build[this.tool].name}</b>`; }
-    else { bb.classList.add('hidden'); cb.classList.add('hidden'); const t=this.upgradeTarget();
-      if(t){ const cost=C.build[t.type].cost(t.level+1); ub.classList.remove('hidden'); ub.classList.toggle('off',this.bananas<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; } else ub.classList.add('hidden');
-      const st=this.sellTarget(); if(st){ sb.classList.remove('hidden'); sb.innerHTML=`Sell · +${this.sellValue(st)}`; } else sb.classList.add('hidden'); }
-    // Clear is available any time a tree/rock is within reach — so you can chop a blocker even with a tool selected
-    if(clb){ const ct=this.clearTarget(); clb.classList.toggle('hidden',!ct); } }
+    const hide=(...e)=>e.forEach(x=>x.classList.add('hidden')), show=(...e)=>e.forEach(x=>x.classList.remove('hidden')), built=this.built();
+    if(this.sellMode){ hide(bb,ub,clb); show(cb,sb); sb.classList.add('selling'); sb.innerHTML='Done'; cb.innerHTML='Cancel';
+    } else { sb.classList.remove('selling'); cb.innerHTML='Cancel';
+      if(this.tool){ const gp=this.ghostPos(), err=this.placeError(this.tool,gp.x,gp.y); show(bb,cb); hide(ub);
+        bb.classList.toggle('off',!!err); bb.innerHTML = err ? `<span class="why">${err}</span>` : `Build <b>${C.build[this.tool].name}</b>`; }
+      else { hide(bb,cb); const t=this.upgradeTarget();
+        if(t){ const cost=C.build[t.type].cost(t.level+1); show(ub); ub.classList.toggle('off',this.bananas<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; } else hide(ub); }
+      // Sell button is always available once you've built something — tap it to enter sell mode
+      if(built){ show(sb); sb.innerHTML='Sell'; } else hide(sb);
+      const ct=this.clearTarget(); clb.classList.toggle('hidden',!ct); } }
   banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span>`+(n?`<span class="wb-s">${n}</span>`:''); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
   toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove('show'),1900); }
 
@@ -290,7 +302,8 @@ class Game{
     if(this.trainees) this.render.syncTrainees(this.trainees,t);
     this.render.syncNets(this.nets||[]); this.render.syncHero(this.hero,t);
     if(playing){ this.render.syncStructures(this.structures); this.render.syncWalls(this.wallBlocks);
-      if(this.tool){ const gp=this.ghostPos(); this.render.setGhost(this.tool,gp.x,gp.y,this.canPlace(this.tool,gp.x,gp.y)); } else this.render.clearGhost(); }
+      if(this.sellMode){ this.render.clearGhost(); const t=this.sellTargetAt(this.aimPt); this.render.setSellGhost(t?{x:t.obj.x,y:t.obj.y}:null); }
+      else { this.render.setSellGhost(null); if(this.tool){ const gp=this.ghostPos(); this.render.setGhost(this.tool,gp.x,gp.y,this.canPlace(this.tool,gp.x,gp.y)); } else this.render.clearGhost(); } }
     this.render.streamWorld(this.hero); this.render.updateFx(dt); this.render.followCam(this.hero,dt); this.render.draw();
     requestAnimationFrame(t2=>this.loop(t2));
   }

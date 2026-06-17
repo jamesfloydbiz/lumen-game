@@ -118,7 +118,7 @@ class Renderer{
     for(let i=0;i<tiers;i++){ const rr=3.4-i*0.7; const cone=new THREE.Mesh(new THREE.ConeGeometry(rr,3.4,8),this.mat(greens[i%greens.length],{flat:true,r:0.9})); cone.position.y=h-0.5+i*2.1; cone.castShadow=true; g.add(cone); }
     g.userData.col=1.3; return g; }
   makeBush(rng){ const g=new THREE.Group(); const m=this.mat(0x53a93c,{flat:true,r:0.9}); const lobes=3+Math.floor(rng()*3);
-    for(let i=0;i<lobes;i++){ const s=0.9+rng()*1.1; const b=new THREE.Mesh(new THREE.SphereGeometry(s,8,6),m); b.position.set((rng()-0.5)*2.4,s*0.8,(rng()-0.5)*2.4); b.castShadow=true; g.add(b); } return g; }
+    for(let i=0;i<lobes;i++){ const s=0.9+rng()*1.1; const b=new THREE.Mesh(new THREE.SphereGeometry(s,8,6),m); b.position.set((rng()-0.5)*2.4,s*0.8,(rng()-0.5)*2.4); b.castShadow=true; g.add(b); } g.userData.col=1.3; return g; }
   makeRock(rng){ const g=new THREE.Group(); const m=this.mat(0x8d8f93,{flat:true,r:0.95}); const n=1+Math.floor(rng()*2);
     for(let i=0;i<n;i++){ const s=0.8+rng()*1.6; const rk=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),m); rk.position.set((rng()-0.5)*2,s*0.5,(rng()-0.5)*2); rk.rotation.set(rng(),rng(),rng()); rk.castShadow=true; g.add(rk); } g.userData.col=1.4; return g; }
   makeGrassTuft(rng){ const g=new THREE.Group(); const m=this.mat(0x6fbf45,{flat:true}); for(let i=0;i<4;i++){ const bl=new THREE.Mesh(new THREE.ConeGeometry(0.18,1.2+rng(),4),m); bl.position.set((rng()-0.5)*1.4,0.6,(rng()-0.5)*1.4); bl.rotation.z=(rng()-0.5)*0.5; g.add(bl); } return g; }
@@ -235,6 +235,13 @@ class Renderer{
       this.ghost=g; this.ghostGroup.add(g); }
     this.ghost.visible=true; this.ghost.position.set(x,0,y); const col=valid?0x66e066:0xe06666; this.ghost.userData.disc.material.color.setHex(col); this.ghost.userData.box.material.color.setHex(col); }
   clearGhost(){ if(this.ghost) this.ghost.visible=false; }
+  // red marker over the structure the cursor is about to sell (Sell mode)
+  setSellGhost(p){ if(!p){ if(this.sellGhost) this.sellGhost.visible=false; return; }
+    if(!this.sellGhost){ const g=new THREE.Group();
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(2.6,0.32,8,24),new THREE.MeshBasicMaterial({color:0xff5a4a,transparent:true,opacity:0.9,depthWrite:false})); ring.rotation.x=-Math.PI/2; ring.position.y=0.3; g.add(ring);
+      const box=new THREE.Mesh(new THREE.BoxGeometry(4.4,4.4,4.4),new THREE.MeshBasicMaterial({color:0xff5a4a,wireframe:true,transparent:true,opacity:0.45,depthWrite:false})); box.position.y=2.2; g.add(box);
+      this.sellGhost=g; this.ghostGroup.add(g); }
+    this.sellGhost.visible=true; this.sellGhost.position.set(p.x,0,p.y); }
 
   /* ---------- hero / keepers ---------- */
   makeHero(){ const g=new THREE.Group();
