@@ -111,6 +111,9 @@ as a `phase==='truck'` sub-state machine (`in → load → out`), driving to the
   + `game.render.draw()` in the same eval before `preview_screenshot`, or you'll capture a stale frame.
 - The preview occasionally fails to start with `spawn …/disclaimer ENOENT`; it's transient — just call
   `preview_start` again, no config change needed.
+- **It's deployed to GitHub Pages** (public repo, `main`/root) → https://jamesfloydbiz.github.io/lumen-game/.
+  Asset URLs in `index.html` carry a `?v=N` cache-buster — **bump N on every deploy** or browsers serve
+  stale JS/CSS (this caused a "no error message shows" report once). Local git identity is set in-repo.
 
 ## Conventions
 
