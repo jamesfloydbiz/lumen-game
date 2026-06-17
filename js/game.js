@@ -56,6 +56,7 @@ class Game{
     if(U.dist(x,y,C.core.x,C.core.y) < C.coreClear) return 'Too close to the pile';
     if(this.inWater(x,y)) return "Can't build on the river";
     if(this.occupied(x,y, C.snap*0.9)) return 'Blocked — too close to another build';
+    const cols=this.render.colliders; if(cols){ const foot=def.foot||2; for(const c of cols){ if(U.dist(x,y,c.x,c.y) < foot+c.r) return 'Blocked — clear the trees & rocks first'; } }
     return null; }
   canPlace(type,x,y){ return !this.placeError(type,x,y); }
   buildLog(r,gp){ const a=(window.__buildLog=window.__buildLog||[]); a.push({tool:this.tool,gp:gp&&{x:gp.x,y:gp.y},result:r,bananas:Math.floor(this.bananas)}); if(a.length>40) a.shift(); }
@@ -77,6 +78,10 @@ class Game{
     for(const w of this.wallBlocks){ const d=U.dist(h.x,h.y,w.x,w.y); if(d<bd){bd=d;best=w;kind='wall';} }
     return best?{obj:best,kind}:null; }
   sellValue(t){ if(t.kind==='wall') return Math.max(1,Math.round(CONFIG.build.wall.cost()*0.6)); const def=CONFIG.build[t.obj.type]; let tot=0; for(let l=1;l<=t.obj.level;l++) tot+=def.cost(l); return Math.max(1,Math.round(tot*0.6)); }
+  /* ---- clear brush (chop the nearest tree/rock so you can build there — free, no banana reward to avoid a money fountain) ---- */
+  clearTarget(){ const h=this.hero, cols=this.render.colliders; if(!cols||!cols.length) return null; let best=null,bd=CONFIG.hero.buildReach;
+    for(const c of cols){ const d=U.dist(h.x,h.y,c.x,c.y)-c.r; if(d<bd){bd=d;best=c;} } return best; }
+  doClear(){ const c=this.clearTarget(); if(!c) return; const p=this.render.clearPropAt(c.x,c.y); if(p){ this.render.burst(p.x,p.y,0x9ad24a); this.toast('Cleared'); SFX.pickup(); } }
   doSell(){ const t=this.sellTarget(); if(!t) return; const refund=this.sellValue(t); this.bananas+=refund;
     if(t.kind==='wall'){ const w=t.obj; if(w.mesh){ this.render.wallGroup.remove(w.mesh); this.render.disposeGroup(w.mesh); } this.wallBlocks.splice(this.wallBlocks.indexOf(w),1); }
     else { const s=t.obj; if(s._claw){ this.render.clawGroup.remove(s._claw.grp); this.render.disposeGroup(s._claw.grp); s._claw=null; } if(s.mesh){ this.render.structGroup.remove(s.mesh); this.render.disposeGroup(s.mesh); } this.structures.splice(this.structures.indexOf(s),1); this.rebuildDerived(); }
@@ -153,7 +158,7 @@ class Game{
     $('pauseBtn').onclick=()=>this.togglePause(true); $('resumeBtn').onclick=()=>this.togglePause(false);
     $('restartBtn').onclick=()=>{ this.togglePause(false); this.beginRun(); };
     $('muteBtn').onclick=e=>{ const m=!SFX.isMuted(); SFX.setMuted(m); e.target.textContent='Sound: '+(m?'Off':'On'); };
-    $('buildBtn').onclick=()=>this.placeTool(); $('upgradeBtn').onclick=()=>this.doUpgrade(); $('sellBtn').onclick=()=>this.doSell(); $('cancelBtn').onclick=()=>{ this.tool=null; }; }
+    $('buildBtn').onclick=()=>this.placeTool(); $('upgradeBtn').onclick=()=>this.doUpgrade(); $('sellBtn').onclick=()=>this.doSell(); $('clearBtn').onclick=()=>this.doClear(); $('cancelBtn').onclick=()=>{ this.tool=null; }; }
   bindInput(){ const keymap={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
     addEventListener('keydown',e=>{ if(e.code==='Escape'){this.togglePause();return;} if(e.code==='Space'){ if(this.tool) this.placeTool(); else this.doUpgrade(); e.preventDefault(); return; } if(keymap[e.code]){this.input[keymap[e.code]]=true;e.preventDefault();} });
     addEventListener('keyup',e=>{ if(keymap[e.code]) this.input[keymap[e.code]]=false; });
@@ -267,12 +272,14 @@ class Game{
   syncTray(){ if(!this.chips) return; const C=CONFIG;
     for(const type in this.chips){ const el=this.chips[type], def=C.build[type], locked=!this.unlocked.has(type), poor=this.bananas<def.cost(1);
       el.classList.toggle('locked',locked); el.classList.toggle('poor',!locked&&poor); el.classList.toggle('sel',this.tool===type); }
-    const bb=document.getElementById('buildBtn'), ub=document.getElementById('upgradeBtn'), cb=document.getElementById('cancelBtn'), sb=document.getElementById('sellBtn');
+    const bb=document.getElementById('buildBtn'), ub=document.getElementById('upgradeBtn'), cb=document.getElementById('cancelBtn'), sb=document.getElementById('sellBtn'), clb=document.getElementById('clearBtn');
     if(this.tool){ const gp=this.ghostPos(), err=this.placeError(this.tool,gp.x,gp.y); bb.classList.remove('hidden'); cb.classList.remove('hidden'); ub.classList.add('hidden'); sb.classList.add('hidden');
       bb.classList.toggle('off',!!err); bb.innerHTML = err ? `<span class="why">${err}</span>` : `Build <b>${C.build[this.tool].name}</b>`; }
     else { bb.classList.add('hidden'); cb.classList.add('hidden'); const t=this.upgradeTarget();
       if(t){ const cost=C.build[t.type].cost(t.level+1); ub.classList.remove('hidden'); ub.classList.toggle('off',this.bananas<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; } else ub.classList.add('hidden');
-      const st=this.sellTarget(); if(st){ sb.classList.remove('hidden'); sb.innerHTML=`Sell · +${this.sellValue(st)}`; } else sb.classList.add('hidden'); } }
+      const st=this.sellTarget(); if(st){ sb.classList.remove('hidden'); sb.innerHTML=`Sell · +${this.sellValue(st)}`; } else sb.classList.add('hidden'); }
+    // Clear is available any time a tree/rock is within reach — so you can chop a blocker even with a tool selected
+    if(clb){ const ct=this.clearTarget(); clb.classList.toggle('hidden',!ct); } }
   banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span>`+(n?`<span class="wb-s">${n}</span>`:''); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
   toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove('show'),1900); }
 

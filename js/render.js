@@ -44,7 +44,7 @@ class Renderer{
     this.terrMesh=new THREE.Mesh(new THREE.PlaneGeometry(this.TERR_SPAN,this.TERR_SPAN),new THREE.MeshBasicMaterial({map:this.terrTex,transparent:true,depthWrite:false,opacity:0.85}));
     this.terrMesh.rotation.x=-Math.PI/2; this.terrMesh.position.y=0.05; scene.add(this.terrMesh);
 
-    this.chunks=new Map();
+    this.chunks=new Map(); this.cleared=new Set();   // world props the player has chopped down (persist across chunk reloads, reset each run)
     this.chunkGroup=new THREE.Group(); this.structGroup=new THREE.Group(); this.wallGroup=new THREE.Group();
     this.ghostGroup=new THREE.Group(); this.spawnGroup=new THREE.Group();
     this.monkeyGroup=new THREE.Group(); this.trainGroup=new THREE.Group(); this.netGroup=new THREE.Group(); this.fxGroup=new THREE.Group();
@@ -101,8 +101,10 @@ class Renderer{
     const n = regKey==='jungle' ? 6+Math.floor(rng()*5) : regKey==='savanna' ? 2+Math.floor(rng()*3) : 4+Math.floor(rng()*4);
     const cols=[];
     for(let i=0;i<n;i++){ const wx=cx*cs+rng()*cs, wy=cy*cs+rng()*cs; if(this.isCoreClear(wx,wy)) continue;
-      const prop=this.makeBiomeProp(regKey,rng); prop.position.set(wx,0,wy); prop.rotation.y=rng()*TAU; g.add(prop);
-      if(prop.userData.col) cols.push({x:wx,y:wy,r:prop.userData.col}); }
+      const prop=this.makeBiomeProp(regKey,rng), rot=rng()*TAU;   // consume rng identically whether kept or cleared, so reloads stay deterministic
+      if(this.cleared.has(wx.toFixed(2)+','+wy.toFixed(2))){ this.disposeGroup(prop); continue; }
+      prop.position.set(wx,0,wy); prop.rotation.y=rot; g.add(prop);
+      if(prop.userData.col) cols.push({x:wx,y:wy,r:prop.userData.col,mesh:prop}); }
     g.userData.col=cols; this.chunkGroup.add(g); this.chunks.set(k,g); this._collDirty=true;
   }
   makeBiomeProp(reg,rng){ const t=rng();
@@ -131,7 +133,12 @@ class Renderer{
     const bars=new THREE.Mesh(new THREE.BoxGeometry(s*1.04,s*1.04,s*1.04),new THREE.MeshBasicMaterial({color:0x6a6f76,wireframe:true})); bars.position.y=s/2; g.add(bars); g.userData.col=1.4; return g; }
   makeMound(rng){ const s=4+rng()*4; const m=new THREE.Mesh(new THREE.SphereGeometry(s,10,7,0,TAU,0,Math.PI*0.5),this.mat(0x8a9098,{flat:true,r:1})); m.scale.y=0.32; m.position.y=-0.2; m.receiveShadow=true; m.castShadow=true; return m; }
   disposeGroup(g){ g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
-  clearChunks(){ for(const [k,g] of this.chunks){ this.chunkGroup.remove(g); this.disposeGroup(g); } this.chunks.clear(); }
+  clearChunks(){ for(const [k,g] of this.chunks){ this.chunkGroup.remove(g); this.disposeGroup(g); } this.chunks.clear(); this.cleared.clear(); this._collDirty=true; }
+  // chop down the world prop nearest (x,y): drop its mesh + collider and remember it so it doesn't respawn when the chunk reloads
+  clearPropAt(x,y){ if(!this.colliders) return null; let best=null,bd=1e9; for(const c of this.colliders){ const d=U.dist(x,y,c.x,c.y); if(d<bd){bd=d;best=c;} } if(!best) return null;
+    this.cleared.add(best.x.toFixed(2)+','+best.y.toFixed(2));
+    if(best.mesh){ const par=best.mesh.parent; if(par){ par.remove(best.mesh); if(par.userData.col){ const i=par.userData.col.indexOf(best); if(i>=0) par.userData.col.splice(i,1); } } this.disposeGroup(best.mesh); }
+    this._collDirty=true; return {x:best.x,y:best.y}; }
 
   /* ---------- static world landmarks ---------- */
   buildWorld(){ const W=this.worldGroup;
