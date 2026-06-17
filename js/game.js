@@ -28,7 +28,7 @@ class Game{
     this.structures=[]; this.wallBlocks=[];
     this.monkeys=[]; this.nets=[]; this.trainees=[];
     this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[];
-    this.render.resetBase(); this.render.updateCore(this.bananas); this.render.closeZooGate(); this.render.drawTerritory(this);
+    this.render.resetBase(); this.render.updateCore(this.bananas); this.render.closeZooGate(); this.render.drawTerritory(this); this.render.drawSupply(this);
     this.hero={x:0,y:13,aim:-Math.PI/2,face:-Math.PI/2,moving:false,cd:0};
     ['start','end'].forEach(id=>document.getElementById(id).classList.add('hidden'));
     document.getElementById('hud').classList.remove('hidden'); document.getElementById('build').classList.remove('hidden');
@@ -79,12 +79,19 @@ class Game{
       else if(p.type==='trainee'){ for(let i=0;i<s.count;i++){ const a=i/s.count*TAU; this.trainees.push({hx:p.x,hy:p.y,x:p.x+Math.cos(a)*3,y:p.y+Math.sin(a)*3,range:s.range,rate:s.rate,speed:s.speed,cd:U.rand(0,1),tx:p.x,ty:p.y,roamT:0,aim:0,moving:false,wob:U.rand(TAU),mesh:null}); } } }
     this.computeSupply(roads, farmList);
     for(const f of farmList){ if(f.connected) this.ecoRate += CONFIG.build.farm.stat(f.level).eco; }
+    this.render.drawSupply(this);
   }
-  // BFS from the core over Supply Lines; a farm only produces if a chain reaches it
-  computeSupply(roads, farms){ const L2=CONFIG.linkDist*CONFIG.linkDist, nodes=[{x:CONFIG.core.x,y:CONFIG.core.y}].concat(roads);
-    const reached=new Array(nodes.length).fill(false); reached[0]=true; const q=[0];
-    while(q.length){ const i=q.shift(); for(let j=0;j<nodes.length;j++){ if(!reached[j] && U.dist2(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)<=L2){ reached[j]=true; q.push(j); } } }
-    for(const f of farms){ f.connected=false; for(let j=0;j<nodes.length;j++){ if(reached[j] && U.dist2(f.x,f.y,nodes[j].x,nodes[j].y)<=L2){ f.connected=true; break; } } } }
+  // BFS from the core over Supply Lines; a farm only produces if a chain reaches it.
+  // Also records the wire segments + each connected farm's path back to the pile (for the claw animation).
+  computeSupply(roads, farms){ const L2=CONFIG.linkDist*CONFIG.linkDist, nodes=[{x:CONFIG.core.x,y:CONFIG.core.y}].concat(roads), N=nodes.length;
+    const reached=new Array(N).fill(false), parent=new Array(N).fill(-1); reached[0]=true; const q=[0];
+    while(q.length){ const i=q.shift(); for(let j=0;j<N;j++){ if(!reached[j] && U.dist2(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)<=L2){ reached[j]=true; parent[j]=i; q.push(j); } } }
+    this.supplyWires=[];
+    for(let j=1;j<N;j++){ if(reached[j]&&parent[j]>=0) this.supplyWires.push([nodes[j].x,nodes[j].y,nodes[parent[j]].x,nodes[parent[j]].y]); }
+    for(const f of farms){ f.connected=false; f.path=null; let best=-1,bd=L2;
+      for(let j=0;j<N;j++){ if(reached[j]){ const d=U.dist2(f.x,f.y,nodes[j].x,nodes[j].y); if(d<=bd){bd=d;best=j;} } }
+      if(best>=0){ f.connected=true; this.supplyWires.push([f.x,f.y,nodes[best].x,nodes[best].y]);
+        const path=[{x:f.x,y:f.y}]; let k=best; while(k!==-1){ path.push({x:nodes[k].x,y:nodes[k].y}); k=parent[k]; } f.path=path; } } }
 
   /* ---- waves ---- */
   checkUnlocks(){ const t=CONFIG.unlockByWave[this.wave]; if(t && !this.unlocked.has(t)){ this.unlocked.add(t); this.toast('Unlocked: '+CONFIG.build[t].name); SFX.unlock(); } }

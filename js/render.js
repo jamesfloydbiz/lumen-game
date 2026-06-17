@@ -10,7 +10,7 @@ const ACCENT = { net:0x49b7e8, gold:0xffce5e, mud:0x9a6a38, wood:0xc08a3a, lime:
 
 class Renderer{
   constructor(canvas, game){
-    this.game=game; const C=CONFIG;
+    this.game=game; const C=CONFIG; this.WIRE_H=4.2;
     const r=this.renderer=new THREE.WebGLRenderer({canvas, antialias:true});
     r.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
     r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -48,14 +48,15 @@ class Renderer{
     this.chunkGroup=new THREE.Group(); this.structGroup=new THREE.Group(); this.wallGroup=new THREE.Group();
     this.ghostGroup=new THREE.Group(); this.spawnGroup=new THREE.Group();
     this.monkeyGroup=new THREE.Group(); this.trainGroup=new THREE.Group(); this.netGroup=new THREE.Group(); this.fxGroup=new THREE.Group();
-    this.worldGroup=new THREE.Group();
-    scene.add(this.chunkGroup,this.structGroup,this.wallGroup,this.ghostGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.netGroup,this.fxGroup,this.worldGroup);
+    this.worldGroup=new THREE.Group(); this.wireGroup=new THREE.Group(); this.clawGroup=new THREE.Group(); this.claws=[];
+    scene.add(this.chunkGroup,this.structGroup,this.wallGroup,this.ghostGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.netGroup,this.fxGroup,this.worldGroup,this.wireGroup,this.clawGroup);
     this.fx=[];
     // drifting dust motes for atmosphere
     this.motes=new THREE.Group(); scene.add(this.motes); this._moteData=[];
     for(let i=0;i<22;i++){ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xfff3cf,blending:THREE.AdditiveBlending,transparent:true,opacity:0,depthWrite:false})); const s=0.5+Math.random()*0.7; sp.scale.set(s,s,1); this.motes.add(sp); this._moteData.push({sp,ox:U.rand(-60,60),oy:U.rand(5,32),oz:U.rand(-60,60),ph:U.rand(TAU),v:U.rand(0.2,0.5)}); }
 
     this.coreGroup=new THREE.Group(); this.coreGroup.position.set(C.core.x,0,C.core.y); scene.add(this.coreGroup); this.buildCore(C.bananas);
+    this.flagPole=this.makeFlagPole(); this.flagPole.position.set(C.core.x,0,C.core.y); scene.add(this.flagPole);   // central hub the supply wires snap to
     this.hero=this.makeHero(); scene.add(this.hero);
     this.truck=this.makeTruck(); this.truck.visible=false; scene.add(this.truck);
     this.buildWorld();
@@ -161,8 +162,33 @@ class Renderer{
   updateCore(n){ if(n!==this._coreN){ this._coreN=n; this.buildCore(Math.max(0,n)); } }
 
   /* ---------- base: reset, structures, walls, ghost, spawn markers ---------- */
-  resetBase(){ for(const g of [this.structGroup,this.wallGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup]){ while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); } }
-    this.clearGhost(); this._trainCount=0; this.setTruck(false); this.clearChunks(); }
+  resetBase(){ for(const g of [this.structGroup,this.wallGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.wireGroup,this.clawGroup]){ while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); } }
+    this.claws=[]; this.clearGhost(); this._trainCount=0; this.setTruck(false); this.clearChunks(); }
+  makeFlagPole(){ const g=new THREE.Group();
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.3,9.5,8),this.mat(0xc9cdd2,{m:0.3})); pole.position.y=4.75; pole.castShadow=true; g.add(pole);
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(0.4,10,8),this.mat(0xffce5e,{e:0.2})); ball.position.y=9.6; g.add(ball);
+    const flag=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.7,2.8),this.mat(0xff8a3a,{e:0.12})); flag.position.set(0,8.3,1.4); flag.castShadow=true; g.add(flag);
+    const ban=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.9,6),this.mat(0xffe24a)); ban.position.set(0,8.3,1.4); ban.rotation.x=0.5; g.add(ban);
+    return g; }
+  /* ---- supply network: poles already placed as structures; here we string wires + run claws ---- */
+  drawSupply(game){ const wg=this.wireGroup; while(wg.children.length){ const c=wg.children[0]; wg.remove(c); this.disposeGroup(c); }
+    const H=this.WIRE_H; for(const e of (game.supplyWires||[])) this.addWire(wg,e[0],e[1],e[2],e[3],H);
+    const cg=this.clawGroup; while(cg.children.length){ const c=cg.children[0]; cg.remove(c); this.disposeGroup(c); } this.claws=[];
+    for(const s of game.structures){ if(s.type==='farm' && s.connected && s.path && s.path.length>=2) this.claws.push(this.makeClaw(s.path,H)); } }
+  addWire(g,ax,ay,bx,by,h){ const a=new THREE.Vector3(ax,h,ay), b=new THREE.Vector3(bx,h,by), len=a.distanceTo(b); if(len<0.1) return;
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,len,5),this.mat(0x33291e)); m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), b.clone().sub(a).normalize()); g.add(m); }
+  makeClaw(path,h){ const grp=new THREE.Group();
+    const trolley=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.4,0.6),this.mat(0x5a6068,{m:0.4})); grp.add(trolley);
+    for(const sx of [-1,1]) for(const sz of [-1,1]){ const pr=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.02,0.8,4),this.mat(0x9aa0a8,{m:0.4})); pr.position.set(sx*0.2,-0.55,sz*0.16); pr.rotation.set(sz*0.25,0,-sx*0.25); grp.add(pr); }
+    const ban=new THREE.Mesh(THREE.CapsuleGeometry?new THREE.CapsuleGeometry(0.22,0.7,3,6):new THREE.CylinderGeometry(0.2,0.2,0.9,6),this.mat(0xffcf33)); ban.position.y=-0.95; ban.rotation.z=0.5; grp.add(ban);
+    this.clawGroup.add(grp);
+    const pts=path.map(p=>new THREE.Vector3(p.x,h,p.y)); const segLen=[]; let total=0; for(let i=0;i<pts.length-1;i++){ const l=pts[i].distanceTo(pts[i+1]); segLen.push(l); total+=l; }
+    return {grp,ban,pts,segLen,total:Math.max(0.001,total),t:0,dir:1,carry:true,speed:8}; }
+  posAlong(pts,segLen,d){ let i=0; while(i<segLen.length && d>segLen[i]){ d-=segLen[i]; i++; } if(i>=segLen.length) return pts[pts.length-1]; const a=pts[i],b=pts[i+1],t=segLen[i]>0?d/segLen[i]:0; return a.clone().lerp(b,t); }
+  updateClaws(dt){ if(!this.claws) return; for(const c of this.claws){ c.t+=c.speed*dt*c.dir;
+    if(c.t>=c.total){ c.t=c.total; c.dir=-1; c.carry=false; } else if(c.t<=0){ c.t=0; c.dir=1; c.carry=true; }
+    c.grp.position.copy(this.posAlong(c.pts,c.segLen,c.t)); c.ban.visible=c.carry; } }
   // redraw the claimed-territory overlay: union of glowing discs around the pile + everything built
   drawTerritory(game){ if(!this.terrCanvas) return; const c=this.terrCanvas, x=c.getContext('2d'), S=c.width, span=this.TERR_SPAN, sc=S/span; x.clearRect(0,0,S,S);
     const pts=[{x:CONFIG.core.x,y:CONFIG.core.y,r:15}];
@@ -248,8 +274,9 @@ class Renderer{
         const nub=new THREE.Mesh(new THREE.SphereGeometry(0.4,8,6),this.mat(0xffcf33)); nub.position.set(-1.6+c0*1.6,1.9,-1.6+r0*1.6); g.add(nub); }
       const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,2.6+lv*0.4,12),this.mat(0xddae5a)); silo.position.set(2.6,1.3+lv*0.2,2.6); silo.castShadow=true; g.add(silo);
       const warn=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xff5a4a,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); warn.scale.set(3.2,3.2,1); warn.position.y=6.2; warn.visible=false; g.add(warn); g.userData.warn=warn; }
-    else if(type==='supply'){ const tile=new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.8,0.4,8),this.mat(0xa9824e,{flat:true})); tile.position.y=0.2; tile.receiveShadow=true; g.add(tile);
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(1.0,0.18,6,10),this.mat(0xc8a25a)); ring.rotation.x=Math.PI/2; ring.position.y=0.55; g.add(ring); }
+    else if(type==='supply'){ const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,this.WIRE_H+0.6,7),this.mat(0xffffff,{flat:true,r:0.85,map:this.woodTex})); pole.position.y=(this.WIRE_H+0.6)/2; pole.castShadow=true; g.add(pole);
+      const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,1.5,5),this.mat(0x6f4a28,{flat:true})); arm.rotation.z=Math.PI/2; arm.position.y=this.WIRE_H+0.2; g.add(arm);
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,6),this.mat(0xc8a25a)); cap.position.y=this.WIRE_H+0.6; g.add(cap); }
     else if(type==='trainee'){ const tent=new THREE.Mesh(new THREE.ConeGeometry(2.4,3,4),this.mat(0x6ea83a,{flat:true})); tent.rotation.y=Math.PI/4; tent.position.y=1.5; tent.castShadow=true; g.add(tent);
       const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.8,1.0),this.mat(0x8ed24a,{e:0.2})); flag.position.set(0,3.3,0.5); g.add(flag); }
     if(lv>1){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.32,8,6),this.mat(ACCENT.gold,{e:0.3})); pip.position.set(0,6.2,0); g.add(pip); }
@@ -280,7 +307,7 @@ class Renderer{
   /* ---------- camera ---------- */
   followCam(h,dt){ const k=Math.min(1,dt*4.2);
     this._terrPulse=(this._terrPulse||0)+dt; if(this.terrMesh) this.terrMesh.material.opacity=0.78+Math.sin(this._terrPulse*1.6)*0.12;
-    this.updateMotes(h,this._terrPulse);
+    this.updateMotes(h,this._terrPulse); this.updateClaws(dt);
     this.camLook.x=U.lerp(this.camLook.x,h.x,k); this.camLook.z=U.lerp(this.camLook.z,h.y,k);
     const tx=h.x+this.camOff.x, ty=this.camOff.y, tz=h.y+this.camOff.z;
     this.camera.position.x=U.lerp(this.camera.position.x,tx,k); this.camera.position.y=U.lerp(this.camera.position.y,ty,k); this.camera.position.z=U.lerp(this.camera.position.z,tz,k);
