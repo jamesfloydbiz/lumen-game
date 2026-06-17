@@ -135,10 +135,10 @@ class Game{
     const wading=this.inWater(h.x,h.y) && Math.abs(h.y)>C.water.bridgeHalf;   // off-bridge crossing is slow, not blocked
     const spd=C.hero.speed*(wading?C.waterSlow:1), lim=C.worldClamp;
     h.x=U.clamp(h.x+mx*spd*dt,-lim,lim); h.y=U.clamp(h.y+my*spd*dt,-lim,lim);
-    this.collideWalls(h,C.hero.radius);
+    // NOTE: the keeper passes through his own walls (climbs ramparts) so you can lay wall lines freely; walls block monkeys, not you.
   }
 
-  /* ---- collision (walls only; the river just slows you) ---- */
+  /* ---- collision: walls block MONKEYS only; the river just slows the keeper ---- */
   collideWalls(e,r){ if(!this.wallBlocks||!this.wallBlocks.length) return; const WR=CONFIG.build.wall.foot, rr=WR+r;
     for(const w of this.wallBlocks){ const ox=e.x-w.x, oy=e.y-w.y, d=Math.hypot(ox,oy); if(d<rr){ if(d>1e-4){ const p=rr-d; e.x+=ox/d*p; e.y+=oy/d*p; } else { e.x+=rr; } } } }
 
