@@ -62,7 +62,7 @@ class Game{
     const def=CONFIG.build[this.tool]; this.bananas-=def.cost(1); this.render.updateCore(Math.floor(this.bananas));
     if(def.wall) this.wallBlocks.push({x:gp.x,y:gp.y});
     else { this.structures.push({type:this.tool,x:gp.x,y:gp.y,level:1}); this.rebuildDerived(); }
-    this.render.drawTerritory(this); SFX.build(); }
+    this.render.drawTerritory(this); this.render.burst(gp.x,gp.y,ACCENT.gold); this.toast('Built '+def.name+' · -'+def.cost(1)); SFX.build(); }
   upgradeTarget(){ if(this.tool) return null; let best=null,bd=CONFIG.hero.buildReach; const h=this.hero;
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
   doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost) return;
