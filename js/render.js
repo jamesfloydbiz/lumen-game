@@ -268,26 +268,46 @@ class Renderer{
     g.userData.r=r; return g; }
 
   /* ---------- towers / farm ---------- */
-  makeTower(type,lv){ const g=new THREE.Group(), col=ACCENT[CONFIG.build[type].accent];
-    if(type==='net'){ const post=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.65,4+lv*0.6,8),this.mat(0xb8bdc4,{m:0.2})); post.position.y=(4+lv*0.6)/2; post.castShadow=true; g.add(post);
-      const head=new THREE.Mesh(new THREE.BoxGeometry(2.6+lv*0.4,1.8,2.6+lv*0.4),this.mat(col,{e:0.35})); head.position.y=4.4+lv*0.6; head.castShadow=true; g.add(head);
-      const barrel=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,2.4,8),this.mat(0x2b8fc4,{e:0.2})); barrel.rotation.x=Math.PI/2; barrel.position.set(0,4.4+lv*0.6,1.5); g.add(barrel); }
-    else if(type==='decoy'){ const dirt=new THREE.Mesh(new THREE.CircleGeometry(3.6,20),this.mat(0xffffff,{map:this.dirtTex})); dirt.rotation.x=-Math.PI/2; dirt.position.y=0.06; g.add(dirt);
-      for(let i=0;i<7+lv*3;i++){ const a=i*2.39; const b=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,1.1,6),this.mat(0xf2c233)); b.position.set(Math.cos(a)*1.3,0.7+(i%3)*0.55,Math.sin(a)*1.3); b.rotation.z=1.0; b.castShadow=true; g.add(b); } }
-    else if(type==='cage'){ const base=new THREE.Mesh(new THREE.BoxGeometry(4.6,0.5,4.6),this.mat(0x8a8f96)); base.position.y=0.25; g.add(base);
-      const cage=new THREE.Mesh(new THREE.BoxGeometry(3.6,3.6,3.6),new THREE.MeshBasicMaterial({color:col,wireframe:true,transparent:true,opacity:0.75})); cage.position.y=2.0; g.add(cage); }
-    else if(type==='mud'){ const patch=new THREE.Mesh(new THREE.CircleGeometry(CONFIG.build.mud.stat(lv).r,24),this.mat(0x6e4a24,{r:1})); patch.rotation.x=-Math.PI/2; patch.position.y=0.07; g.add(patch); }
+  makeTower(type,lv){ const g=new THREE.Group(), col=ACCENT[CONFIG.build[type].accent]; let topY=6.2;
+    if(type==='net'){ const ph=4+lv*0.6; const post=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.65+lv*0.05,ph,8),this.mat(0xb8bdc4,{m:0.2})); post.position.y=ph/2; post.castShadow=true; g.add(post);
+      // bracing struts appear from lv3 (sturdier rig)
+      if(lv>=3) for(const sgn of [-1,1]){ const strut=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,ph*0.9,5),this.mat(0x9aa0a8,{flat:true})); strut.position.set(sgn*0.9,ph*0.42,0); strut.rotation.z=sgn*0.22; g.add(strut); }
+      const hw=2.4+lv*0.45; const head=new THREE.Mesh(new THREE.BoxGeometry(hw,1.6+lv*0.12,hw),this.mat(col,{e:0.2+lv*0.06})); head.position.y=ph+0.4; head.castShadow=true; g.add(head);
+      // one launcher barrel per level, fanned around the front
+      for(let i=0;i<lv;i++){ const a=(i-(lv-1)/2)*0.42; const barrel=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.3,2.2+lv*0.15,8),this.mat(0x2b8fc4,{e:0.25})); barrel.rotation.x=Math.PI/2; barrel.rotation.y=a; barrel.position.set(Math.sin(a)*1.0,ph+0.4,1.3+Math.cos(a)*0.4); g.add(barrel); }
+      topY=ph+1.6; }
+    else if(type==='decoy'){ const rad=2.8+lv*0.6; const dirt=new THREE.Mesh(new THREE.CircleGeometry(rad,22),this.mat(0xffffff,{map:this.dirtTex})); dirt.rotation.x=-Math.PI/2; dirt.position.y=0.06; g.add(dirt);
+      const n=7+lv*5; for(let i=0;i<n;i++){ const a=i*2.39, ring=0.7+(i/n)*(rad*0.5); const b=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,1.1,6),this.mat(0xf2c233)); b.position.set(Math.cos(a)*ring,0.7+(i%(2+lv))*0.5,Math.sin(a)*ring); b.rotation.z=1.0; b.rotation.y=a; b.castShadow=true; g.add(b); }
+      // a gleaming crown banana grows with level
+      const crown=new THREE.Mesh(new THREE.SphereGeometry(0.3+lv*0.18,10,8),this.mat(0xffe06a,{e:0.45})); crown.position.y=1.1+lv*0.5; g.add(crown); topY=crown.position.y+1.2; }
+    else if(type==='cage'){ const sz=3.0+lv*0.55; const base=new THREE.Mesh(new THREE.BoxGeometry(sz+1,0.5,sz+1),this.mat(0x8a8f96)); base.position.y=0.25; g.add(base);
+      // corner posts thicken + a roof pyramid lands from lv3 (heavier trap)
+      for(const [cx,cz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){ const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12+lv*0.03,0.12+lv*0.03,sz,6),this.mat(0x6f757c,{flat:true})); post.position.set(cx*sz/2,sz/2+0.3,cz*sz/2); g.add(post); }
+      const cage=new THREE.Mesh(new THREE.BoxGeometry(sz,sz,sz),new THREE.MeshBasicMaterial({color:col,wireframe:true,transparent:true,opacity:0.55+lv*0.06})); cage.position.y=sz/2+0.3; g.add(cage);
+      if(lv>=3){ const roof=new THREE.Mesh(new THREE.ConeGeometry(sz*0.8,1.2+lv*0.2,4),this.mat(col,{e:0.3,flat:true})); roof.rotation.y=Math.PI/4; roof.position.y=sz+0.5; g.add(roof); }
+      topY=sz+1.2; }
+    else if(type==='mud'){ const r=CONFIG.build.mud.stat(lv).r; const patch=new THREE.Mesh(new THREE.CircleGeometry(r,24),this.mat(0x6e4a24,{r:1})); patch.rotation.x=-Math.PI/2; patch.position.y=0.07; g.add(patch);
+      const inner=new THREE.Mesh(new THREE.CircleGeometry(r*0.62,20),this.mat(0x4f3417,{r:1})); inner.rotation.x=-Math.PI/2; inner.position.y=0.09; g.add(inner);
+      // bubbling pits multiply with level
+      for(let i=0;i<lv*4;i++){ const a=i*2.39, rr=(i/(lv*4))*r*0.8; const bub=new THREE.Mesh(new THREE.SphereGeometry(0.22+ (i%3)*0.06,7,5),this.mat(0x3c2710,{flat:true})); bub.position.set(Math.cos(a)*rr,0.18,Math.sin(a)*rr); bub.scale.y=0.6; g.add(bub); }
+      topY=1.4; }
     else if(type==='farm'){ const plotM=new THREE.Mesh(new THREE.BoxGeometry(5,0.4,5),this.mat(0xffffff,{map:this.dirtTex})); plotM.position.y=0.2; g.add(plotM);
-      for(let r0=0;r0<3;r0++) for(let c0=0;c0<3;c0++){ const stalk=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,1.6,5),this.mat(0x4f9e36)); stalk.position.set(-1.6+c0*1.6,1.0,-1.6+r0*1.6); g.add(stalk);
-        const nub=new THREE.Mesh(new THREE.SphereGeometry(0.4,8,6),this.mat(0xffcf33)); nub.position.set(-1.6+c0*1.6,1.9,-1.6+r0*1.6); g.add(nub); }
-      const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,2.6+lv*0.4,12),this.mat(0xddae5a)); silo.position.set(2.6,1.3+lv*0.2,2.6); silo.castShadow=true; g.add(silo);
-      const warn=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xff5a4a,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); warn.scale.set(3.2,3.2,1); warn.position.y=6.2; warn.visible=false; g.add(warn); g.userData.warn=warn; }
-    else if(type==='supply'){ const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,this.WIRE_H+0.6,7),this.mat(0xffffff,{flat:true,r:0.85,map:this.woodTex})); pole.position.y=(this.WIRE_H+0.6)/2; pole.castShadow=true; g.add(pole);
+      // crop grid gets denser each level (more rows of taller stalks)
+      const n=Math.min(5,2+lv), step=3.4/(n-1||1); for(let r0=0;r0<n;r0++) for(let c0=0;c0<n;c0++){ const h=1.4+lv*0.18; const stalk=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.11,h,5),this.mat(0x4f9e36)); stalk.position.set(-1.7+c0*step,h/2+0.4,-1.7+r0*step); g.add(stalk);
+        const nub=new THREE.Mesh(new THREE.SphereGeometry(0.34,8,6),this.mat(0xffcf33)); nub.position.set(-1.7+c0*step,h+0.4,-1.7+r0*step); g.add(nub); }
+      // silos: one more per two levels, growing taller
+      const silos=Math.ceil(lv/2), sh=2.6+lv*0.4; for(let s=0;s<silos;s++){ const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.0,sh,12),this.mat(0xddae5a)); silo.position.set(2.6, sh/2+0.4, 2.6 - s*2.3); silo.castShadow=true; g.add(silo);
+        const roof=new THREE.Mesh(new THREE.ConeGeometry(1.15,1.0,12),this.mat(0xb98842,{flat:true})); roof.position.set(2.6, sh+0.9, 2.6 - s*2.3); g.add(roof); }
+      const warn=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xff5a4a,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); warn.scale.set(3.2,3.2,1); warn.position.y=6.4; warn.visible=false; g.add(warn); g.userData.warn=warn; topY=sh+1.4; }
+    else if(type==='supply'){ const ph=this.WIRE_H+0.6; const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,ph,7),this.mat(0xffffff,{flat:true,r:0.85,map:this.woodTex})); pole.position.y=ph/2; pole.castShadow=true; g.add(pole);
       const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,1.5,5),this.mat(0x6f4a28,{flat:true})); arm.rotation.z=Math.PI/2; arm.position.y=this.WIRE_H+0.2; g.add(arm);
-      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,6),this.mat(0xc8a25a)); cap.position.y=this.WIRE_H+0.6; g.add(cap); }
-    else if(type==='trainee'){ const tent=new THREE.Mesh(new THREE.ConeGeometry(2.4,3,4),this.mat(0x6ea83a,{flat:true})); tent.rotation.y=Math.PI/4; tent.position.y=1.5; tent.castShadow=true; g.add(tent);
-      const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.8,1.0),this.mat(0x8ed24a,{e:0.2})); flag.position.set(0,3.3,0.5); g.add(flag); }
-    if(lv>1){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.32,8,6),this.mat(ACCENT.gold,{e:0.3})); pip.position.set(0,6.2,0); g.add(pip); }
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,6),this.mat(0xc8a25a)); cap.position.y=ph; g.add(cap); topY=ph+0.4; }
+    else if(type==='trainee'){ const cnt=Math.max(1,lv); // a tent per recruited keeper, clustered
+      for(let i=0;i<cnt;i++){ const a=i*2.39, rr=cnt>1?1.2:0; const tent=new THREE.Mesh(new THREE.ConeGeometry(1.5,2.4,4),this.mat(0x6ea83a,{flat:true})); tent.rotation.y=Math.PI/4; tent.position.set(Math.cos(a)*rr,1.2,Math.sin(a)*rr); tent.castShadow=true; g.add(tent); }
+      const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,3.2+lv*0.3,5),this.mat(0x7a5230,{flat:true})); mast.position.y=(3.2+lv*0.3)/2; g.add(mast);
+      const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.7,1.0+lv*0.18),this.mat(0x8ed24a,{e:0.2})); flag.position.set(0,3.0+lv*0.3,0.5+lv*0.09); g.add(flag); topY=3.4+lv*0.3; }
+    // universal rank: a stack of gold pips = level, so every upgrade reads at a glance
+    for(let i=0;i<lv;i++){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.26,8,6),this.mat(ACCENT.gold,{e:0.4})); pip.position.set(0, topY+0.2+i*0.5, 0); g.add(pip); }
     return g; }
 
   makeTruck(){ const g=new THREE.Group();

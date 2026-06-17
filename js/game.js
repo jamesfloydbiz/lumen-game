@@ -101,9 +101,9 @@ class Game{
   // Supply network. Wires snap between ANY two nearby nodes (core + poles + farms) the moment they're placed.
   // Production/claw still require an actual chain back to the core (BFS), so connectivity is honest.
   computeSupply(roads, farms){ const L2=CONFIG.linkDist*CONFIG.linkDist, nodes=[{x:CONFIG.core.x,y:CONFIG.core.y}].concat(roads), N=nodes.length;
-    // 1) visual wires: every nearby pair among core+poles+farms (instant snap as you build)
+    // 1) visual wires: nearby pairs among core+poles+farms — but NOT farm↔farm (farms don't relay to each other; they only link to a pole or the core)
     const pts=nodes.concat(farms.map(f=>({x:f.x,y:f.y}))); this.supplyWires=[];
-    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ if(U.dist2(pts[i].x,pts[i].y,pts[j].x,pts[j].y)<=L2) this.supplyWires.push([pts[i].x,pts[i].y,pts[j].x,pts[j].y]); }
+    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ if(i>=N && j>=N) continue; if(U.dist2(pts[i].x,pts[i].y,pts[j].x,pts[j].y)<=L2) this.supplyWires.push([pts[i].x,pts[i].y,pts[j].x,pts[j].y]); }
     // 2) production: BFS from core for which farms are truly powered + their path home
     const reached=new Array(N).fill(false), parent=new Array(N).fill(-1); reached[0]=true; const q=[0];
     while(q.length){ const i=q.shift(); for(let j=0;j<N;j++){ if(!reached[j] && U.dist2(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)<=L2){ reached[j]=true; parent[j]=i; q.push(j); } } }
