@@ -91,16 +91,19 @@ class Renderer{
   regionForAngle(a){ let best='savanna',bd=1e9; for(const k in CONFIG.regions){ let diff=a-CONFIG.regions[k].ang; diff=Math.atan2(Math.sin(diff),Math.cos(diff)); const d=Math.abs(diff); if(d<bd){bd=d;best=k;} } return best; }
   streamWorld(hero){ const cs=CONFIG.chunk, vr=CONFIG.viewChunks; const hcx=Math.floor(hero.x/cs), hcy=Math.floor(hero.y/cs);
     for(let dx=-vr;dx<=vr;dx++) for(let dy=-vr;dy<=vr;dy++){ const cx=hcx+dx, cy=hcy+dy, k=cx+','+cy; if(!this.chunks.has(k)) this.buildChunk(cx,cy,k); }
-    for(const [k,g] of this.chunks){ const [cx,cy]=k.split(',').map(Number); if(Math.max(Math.abs(cx-hcx),Math.abs(cy-hcy))>vr+1){ this.chunkGroup.remove(g); this.disposeGroup(g); this.chunks.delete(k); } }
+    for(const [k,g] of this.chunks){ const [cx,cy]=k.split(',').map(Number); if(Math.max(Math.abs(cx-hcx),Math.abs(cy-hcy))>vr+1){ this.chunkGroup.remove(g); this.disposeGroup(g); this.chunks.delete(k); this._collDirty=true; } }
+    if(this._collDirty){ this.colliders=[]; for(const [k,g] of this.chunks){ if(g.userData.col) for(const c of g.userData.col) this.colliders.push(c); } this._collDirty=false; }
   }
   buildChunk(cx,cy,k){ const cs=CONFIG.chunk, rng=this.seedRng(cx,cy), g=new THREE.Group();
     const ccx=cx*cs+cs/2, ccy=cy*cs+cs/2, cdist=Math.hypot(ccx,ccy);
     const regKey=this.regionForAngle(Math.atan2(ccy,ccx)), reg=CONFIG.regions[regKey];
     if(cdist>20){ const tile=new THREE.Mesh(new THREE.PlaneGeometry(cs,cs),this.mat(reg.ground,{r:1})); tile.rotation.x=-Math.PI/2; tile.position.set(ccx,0.02,ccy); tile.receiveShadow=true; g.add(tile); }
     const n = regKey==='jungle' ? 6+Math.floor(rng()*5) : regKey==='savanna' ? 2+Math.floor(rng()*3) : 4+Math.floor(rng()*4);
+    const cols=[];
     for(let i=0;i<n;i++){ const wx=cx*cs+rng()*cs, wy=cy*cs+rng()*cs; if(this.isCoreClear(wx,wy)) continue;
-      const prop=this.makeBiomeProp(regKey,rng); prop.position.set(wx,0,wy); prop.rotation.y=rng()*TAU; g.add(prop); }
-    this.chunkGroup.add(g); this.chunks.set(k,g);
+      const prop=this.makeBiomeProp(regKey,rng); prop.position.set(wx,0,wy); prop.rotation.y=rng()*TAU; g.add(prop);
+      if(prop.userData.col) cols.push({x:wx,y:wy,r:prop.userData.col}); }
+    g.userData.col=cols; this.chunkGroup.add(g); this.chunks.set(k,g); this._collDirty=true;
   }
   makeBiomeProp(reg,rng){ const t=rng();
     if(reg==='jungle'){ if(t<0.5) return this.makeTree(rng); if(t<0.7) return this.makeBush(rng); if(t<0.86) return this.makeFlower(rng); return this.makeRock(rng); }
@@ -111,21 +114,21 @@ class Renderer{
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.8,h,7),this.mat(0x7a5230,{flat:true})); trunk.position.y=h/2; trunk.castShadow=true; g.add(trunk);
     const greens=[0x4f9e36,0x5cb343,0x47913a]; const tiers=2+Math.floor(rng()*2);
     for(let i=0;i<tiers;i++){ const rr=3.4-i*0.7; const cone=new THREE.Mesh(new THREE.ConeGeometry(rr,3.4,8),this.mat(greens[i%greens.length],{flat:true,r:0.9})); cone.position.y=h-0.5+i*2.1; cone.castShadow=true; g.add(cone); }
-    return g; }
+    g.userData.col=1.3; return g; }
   makeBush(rng){ const g=new THREE.Group(); const m=this.mat(0x53a93c,{flat:true,r:0.9}); const lobes=3+Math.floor(rng()*3);
     for(let i=0;i<lobes;i++){ const s=0.9+rng()*1.1; const b=new THREE.Mesh(new THREE.SphereGeometry(s,8,6),m); b.position.set((rng()-0.5)*2.4,s*0.8,(rng()-0.5)*2.4); b.castShadow=true; g.add(b); } return g; }
   makeRock(rng){ const g=new THREE.Group(); const m=this.mat(0x8d8f93,{flat:true,r:0.95}); const n=1+Math.floor(rng()*2);
-    for(let i=0;i<n;i++){ const s=0.8+rng()*1.6; const rk=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),m); rk.position.set((rng()-0.5)*2,s*0.5,(rng()-0.5)*2); rk.rotation.set(rng(),rng(),rng()); rk.castShadow=true; g.add(rk); } return g; }
+    for(let i=0;i<n;i++){ const s=0.8+rng()*1.6; const rk=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),m); rk.position.set((rng()-0.5)*2,s*0.5,(rng()-0.5)*2); rk.rotation.set(rng(),rng(),rng()); rk.castShadow=true; g.add(rk); } g.userData.col=1.4; return g; }
   makeGrassTuft(rng){ const g=new THREE.Group(); const m=this.mat(0x6fbf45,{flat:true}); for(let i=0;i<4;i++){ const bl=new THREE.Mesh(new THREE.ConeGeometry(0.18,1.2+rng(),4),m); bl.position.set((rng()-0.5)*1.4,0.6,(rng()-0.5)*1.4); bl.rotation.z=(rng()-0.5)*0.5; g.add(bl); } return g; }
   makePine(rng){ const g=new THREE.Group(); const h=6+rng()*4;
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,h*0.5,6),this.mat(0x6a4a2c,{flat:true})); trunk.position.y=h*0.25; trunk.castShadow=true; g.add(trunk);
-    for(let i=0;i<3;i++){ const rr=2.6-i*0.7; const cone=new THREE.Mesh(new THREE.ConeGeometry(rr,2.6,7),this.mat(0x2f6e3a,{flat:true,r:0.9})); cone.position.y=h*0.4+i*1.8; cone.castShadow=true; g.add(cone); } return g; }
+    for(let i=0;i<3;i++){ const rr=2.6-i*0.7; const cone=new THREE.Mesh(new THREE.ConeGeometry(rr,2.6,7),this.mat(0x2f6e3a,{flat:true,r:0.9})); cone.position.y=h*0.4+i*1.8; cone.castShadow=true; g.add(cone); } g.userData.col=1.2; return g; }
   makeAcacia(rng){ const g=new THREE.Group(); const h=4+rng()*2;
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.5,h,6),this.mat(0x8a6a3c,{flat:true})); trunk.position.y=h/2; trunk.castShadow=true; g.add(trunk);
-    const canopy=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.7,1.0,9),this.mat(0x6f9e3a,{flat:true,r:0.9})); canopy.position.y=h+0.4; canopy.castShadow=true; g.add(canopy); return g; }
+    const canopy=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.7,1.0,9),this.mat(0x6f9e3a,{flat:true,r:0.9})); canopy.position.y=h+0.4; canopy.castShadow=true; g.add(canopy); g.userData.col=1.0; return g; }
   makeCrate(rng){ const g=new THREE.Group(); const s=1.4+rng()*1.0;
     const box=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),this.mat(0x9a6a3b,{flat:true})); box.position.y=s/2; box.castShadow=true; g.add(box);
-    const bars=new THREE.Mesh(new THREE.BoxGeometry(s*1.04,s*1.04,s*1.04),new THREE.MeshBasicMaterial({color:0x6a6f76,wireframe:true})); bars.position.y=s/2; g.add(bars); return g; }
+    const bars=new THREE.Mesh(new THREE.BoxGeometry(s*1.04,s*1.04,s*1.04),new THREE.MeshBasicMaterial({color:0x6a6f76,wireframe:true})); bars.position.y=s/2; g.add(bars); g.userData.col=1.4; return g; }
   makeMound(rng){ const s=4+rng()*4; const m=new THREE.Mesh(new THREE.SphereGeometry(s,10,7,0,TAU,0,Math.PI*0.5),this.mat(0x8a9098,{flat:true,r:1})); m.scale.y=0.32; m.position.y=-0.2; m.receiveShadow=true; m.castShadow=true; return m; }
   disposeGroup(g){ g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
   clearChunks(){ for(const [k,g] of this.chunks){ this.chunkGroup.remove(g); this.disposeGroup(g); } this.chunks.clear(); }
@@ -195,10 +198,10 @@ class Renderer{
     for(const s of game.structures) pts.push({x:s.x,y:s.y,r:CONFIG.build[s.type].foot+6});
     for(const w of game.wallBlocks) pts.push({x:w.x,y:w.y,r:CONFIG.build.wall.foot+5});
     const cv=(wx,wy)=>[(wx+span/2)*sc,(wy+span/2)*sc];
-    x.save(); x.shadowColor='rgba(255,196,70,0.95)'; x.shadowBlur=5; x.fillStyle='#ffcf4a';
-    for(const p of pts){ const [cx,cy]=cv(p.x,p.y); x.beginPath(); x.arc(cx,cy,(p.r+2.6)*sc,0,Math.PI*2); x.fill(); } x.restore();
+    x.save(); x.shadowColor='rgba(255,205,95,0.6)'; x.shadowBlur=3; x.fillStyle='#eebf4c';
+    for(const p of pts){ const [cx,cy]=cv(p.x,p.y); x.beginPath(); x.arc(cx,cy,(p.r+1.7)*sc,0,Math.PI*2); x.fill(); } x.restore();
     x.globalCompositeOperation='destination-out'; for(const p of pts){ const [cx,cy]=cv(p.x,p.y); x.beginPath(); x.arc(cx,cy,p.r*sc,0,Math.PI*2); x.fill(); }
-    x.globalCompositeOperation='source-over'; x.fillStyle='rgba(150,195,78,0.16)'; for(const p of pts){ const [cx,cy]=cv(p.x,p.y); x.beginPath(); x.arc(cx,cy,p.r*sc,0,Math.PI*2); x.fill(); }
+    x.globalCompositeOperation='source-over'; x.fillStyle='rgba(150,195,78,0.09)'; for(const p of pts){ const [cx,cy]=cv(p.x,p.y); x.beginPath(); x.arc(cx,cy,p.r*sc,0,Math.PI*2); x.fill(); }
     this.terrTex.needsUpdate=true; }
   buildSpawnMarkers(frontiers){ const g=this.spawnGroup; while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); }
     for(const k of frontiers){ if(k==='zoo') continue; const reg=CONFIG.regions[k]; const m=new THREE.Group(); m.position.set(reg.sx,0,reg.sy);
@@ -306,7 +309,7 @@ class Renderer{
 
   /* ---------- camera ---------- */
   followCam(h,dt){ const k=Math.min(1,dt*4.2);
-    this._terrPulse=(this._terrPulse||0)+dt; if(this.terrMesh) this.terrMesh.material.opacity=0.78+Math.sin(this._terrPulse*1.6)*0.12;
+    this._terrPulse=(this._terrPulse||0)+dt; if(this.terrMesh) this.terrMesh.material.opacity=0.58+Math.sin(this._terrPulse*1.2)*0.06;
     this.updateMotes(h,this._terrPulse); this.updateClaws(dt);
     this.camLook.x=U.lerp(this.camLook.x,h.x,k); this.camLook.z=U.lerp(this.camLook.z,h.y,k);
     const tx=h.x+this.camOff.x, ty=this.camOff.y, tz=h.y+this.camOff.z;
@@ -320,6 +323,8 @@ class Renderer{
   coinPop(x,y){ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xffce5e,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); sp.position.set(x,2,y); sp.scale.set(2.6,2.6,1); this.fxGroup.add(sp); this.fx.push({s:sp,vx:0,vy:15,vz:0,life:0.5,max:0.5}); }
   updateFx(dt){ for(let i=this.fx.length-1;i>=0;i--){ const f=this.fx[i]; f.life-=dt; const a=U.clamp(f.life/f.max,0,1); f.s.position.x+=f.vx*dt; f.s.position.y+=f.vy*dt; f.s.position.z+=f.vz*dt; f.s.material.opacity=a; if(f.life<=0){ this.fxGroup.remove(f.s); this.fx.splice(i,1); } } }
 
+  screenToWorld(sx,sy){ const ndc=new THREE.Vector2((sx/this.W)*2-1,-(sy/this.H)*2+1); const ray=new THREE.Raycaster(); ray.setFromCamera(ndc,this.camera);
+    const t=-ray.ray.origin.y/ray.ray.direction.y; return {x:ray.ray.origin.x+ray.ray.direction.x*t, y:ray.ray.origin.z+ray.ray.direction.z*t}; }
   resize(){ const w=window.innerWidth,h=window.innerHeight; this.W=w; this.H=h; this.renderer.setSize(w,h,false); this.camera.aspect=w/h; this.camera.updateProjectionMatrix(); }
   draw(){ this.renderer.render(this.scene,this.camera); }
 }

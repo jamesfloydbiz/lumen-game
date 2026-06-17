@@ -44,7 +44,8 @@ class Game{
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
   selectTool(type){ if(!this.unlocked.has(type)) return; this.tool = (this.tool===type)?null:type; }
-  ghostPos(){ const s=CONFIG.snap, a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
+  ghostPos(){ const s=CONFIG.snap; if(this.tool && this.aimPt) return {x:Math.round(this.aimPt.x/s)*s, y:Math.round(this.aimPt.y/s)*s};
+    const a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
     return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
   occupied(x,y,minD){ for(const s of this.structures){ if(U.dist(x,y,s.x,s.y)<minD) return true; } for(const w of this.wallBlocks){ if(U.dist(x,y,w.x,w.y)<minD) return true; } return false; }
   inWater(x,y){ const w=CONFIG.water; return w && x>w.x-w.halfW && x<w.x+w.halfW && y>w.z0 && y<w.z1; }
@@ -57,12 +58,14 @@ class Game{
     if(this.occupied(x,y, C.snap*0.9)) return 'Blocked — too close to another build';
     return null; }
   canPlace(type,x,y){ return !this.placeError(type,x,y); }
-  placeTool(){ if(!this.tool) return; const gp=this.ghostPos(); const err=this.placeError(this.tool,gp.x,gp.y);
+  placeAt(gp){ if(!this.tool){ this.toast('Pick a tool to build'); return; }
+    const err=this.placeError(this.tool,gp.x,gp.y);
     if(err){ this.toast(err); SFX.hurt(); return; }
     const def=CONFIG.build[this.tool]; this.bananas-=def.cost(1); this.render.updateCore(Math.floor(this.bananas));
     if(def.wall) this.wallBlocks.push({x:gp.x,y:gp.y});
     else { this.structures.push({type:this.tool,x:gp.x,y:gp.y,level:1}); this.rebuildDerived(); }
     this.render.drawTerritory(this); this.render.burst(gp.x,gp.y,ACCENT.gold); this.toast('Built '+def.name+' · -'+def.cost(1)); SFX.build(); }
+  placeTool(){ this.placeAt(this.ghostPos()); }
   upgradeTarget(){ if(this.tool) return null; let best=null,bd=CONFIG.hero.buildReach; const h=this.hero;
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
   doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost) return;
@@ -81,17 +84,18 @@ class Game{
     for(const f of farmList){ if(f.connected) this.ecoRate += CONFIG.build.farm.stat(f.level).eco; }
     this.render.drawSupply(this);
   }
-  // BFS from the core over Supply Lines; a farm only produces if a chain reaches it.
-  // Also records the wire segments + each connected farm's path back to the pile (for the claw animation).
+  // Supply network. Wires snap between ANY two nearby nodes (core + poles + farms) the moment they're placed.
+  // Production/claw still require an actual chain back to the core (BFS), so connectivity is honest.
   computeSupply(roads, farms){ const L2=CONFIG.linkDist*CONFIG.linkDist, nodes=[{x:CONFIG.core.x,y:CONFIG.core.y}].concat(roads), N=nodes.length;
+    // 1) visual wires: every nearby pair among core+poles+farms (instant snap as you build)
+    const pts=nodes.concat(farms.map(f=>({x:f.x,y:f.y}))); this.supplyWires=[];
+    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ if(U.dist2(pts[i].x,pts[i].y,pts[j].x,pts[j].y)<=L2) this.supplyWires.push([pts[i].x,pts[i].y,pts[j].x,pts[j].y]); }
+    // 2) production: BFS from core for which farms are truly powered + their path home
     const reached=new Array(N).fill(false), parent=new Array(N).fill(-1); reached[0]=true; const q=[0];
     while(q.length){ const i=q.shift(); for(let j=0;j<N;j++){ if(!reached[j] && U.dist2(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)<=L2){ reached[j]=true; parent[j]=i; q.push(j); } } }
-    this.supplyWires=[];
-    for(let j=1;j<N;j++){ if(reached[j]&&parent[j]>=0) this.supplyWires.push([nodes[j].x,nodes[j].y,nodes[parent[j]].x,nodes[parent[j]].y]); }
     for(const f of farms){ f.connected=false; f.path=null; let best=-1,bd=L2;
       for(let j=0;j<N;j++){ if(reached[j]){ const d=U.dist2(f.x,f.y,nodes[j].x,nodes[j].y); if(d<=bd){bd=d;best=j;} } }
-      if(best>=0){ f.connected=true; this.supplyWires.push([f.x,f.y,nodes[best].x,nodes[best].y]);
-        const path=[{x:f.x,y:f.y}]; let k=best; while(k!==-1){ path.push({x:nodes[k].x,y:nodes[k].y}); k=parent[k]; } f.path=path; } } }
+      if(best>=0){ f.connected=true; const path=[{x:f.x,y:f.y}]; let k=best; while(k!==-1){ path.push({x:nodes[k].x,y:nodes[k].y}); k=parent[k]; } f.path=path; } } }
 
   /* ---- waves ---- */
   checkUnlocks(){ const t=CONFIG.unlockByWave[this.wave]; if(t && !this.unlocked.has(t)){ this.unlocked.add(t); this.toast('Unlocked: '+CONFIG.build[t].name); SFX.unlock(); } }
@@ -140,9 +144,12 @@ class Game{
     addEventListener('keyup',e=>{ if(keymap[e.code]) this.input[keymap[e.code]]=false; });
     const cv=this.canvas, stick=document.getElementById('stick'), nub=document.getElementById('stickNub');
     const fromUI=t=>{ let el=t.target; while(el){ if(el.id==='build'||el.id==='hud'||el.classList&&el.classList.contains('overlay')) return true; el=el.parentElement; } return false; };
-    const down=(px,py,id)=>{ this.joy.active=true; this.joy.id=id; this.joy.ox=px; this.joy.oy=py; this.joy.dx=0; this.joy.dy=0; stick.style.left=px+'px'; stick.style.top=py+'px'; stick.classList.remove('hidden'); nub.style.transform='translate(-50%,-50%)'; };
-    const move=(px,py)=>{ if(!this.joy.active) return; let dx=px-this.joy.ox,dy=py-this.joy.oy; const max=54,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} this.joy.dx=dx/max; this.joy.dy=dy/max; nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`; };
-    const up=()=>{ this.joy.active=false; this.joy.dx=0; this.joy.dy=0; stick.classList.add('hidden'); };
+    const setAim=(px,py)=>{ if(this.tool) this.aimPt=this.render.screenToWorld(px,py); };  // ghost follows cursor/finger
+    const down=(px,py,id)=>{ this.joy.active=true; this.joy.id=id; this.joy.ox=px; this.joy.oy=py; this.joy.dx=0; this.joy.dy=0; stick.style.left=px+'px'; stick.style.top=py+'px'; stick.classList.remove('hidden'); nub.style.transform='translate(-50%,-50%)';
+      this._tap={x:px,y:py,moved:false}; setAim(px,py); };
+    const move=(px,py)=>{ setAim(px,py); if(this._tap && Math.hypot(px-this._tap.x,py-this._tap.y)>11) this._tap.moved=true; if(!this.joy.active) return; let dx=px-this.joy.ox,dy=py-this.joy.oy; const max=54,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} this.joy.dx=dx/max; this.joy.dy=dy/max; nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`; };
+    const up=()=>{ if(this._tap && !this._tap.moved && (this.phase==='play'||this.phase==='truck')){ if(this.tool) this.placeTool(); else this.toast('Pick a tool to build'); } this._tap=null;
+      this.joy.active=false; this.joy.dx=0; this.joy.dy=0; stick.classList.add('hidden'); };
     cv.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; down(t.clientX,t.clientY,t.identifier); e.preventDefault(); },{passive:false});
     cv.addEventListener('touchmove',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) move(t.clientX,t.clientY); } e.preventDefault(); },{passive:false});
     cv.addEventListener('touchend',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) up(); } }); cv.addEventListener('touchcancel',up);
@@ -154,8 +161,12 @@ class Game{
     const wading=this.inWater(h.x,h.y) && Math.abs(h.y)>C.water.bridgeHalf;   // off-bridge crossing is slow, not blocked
     const spd=C.hero.speed*(wading?C.waterSlow:1), lim=C.worldClamp;
     h.x=U.clamp(h.x+mx*spd*dt,-lim,lim); h.y=U.clamp(h.y+my*spd*dt,-lim,lim);
-    // NOTE: the keeper passes through his own walls (climbs ramparts) so you can lay wall lines freely; walls block monkeys, not you.
+    this.collideProps(h);   // trees & rocks are solid; the keeper passes through his OWN walls (walls block monkeys, not you)
   }
+
+  // push the keeper out of streamed scenery (trees, rocks) so the world feels physical
+  collideProps(e){ const cols=this.render.colliders; if(!cols||!cols.length) return; const R=CONFIG.hero.radius;
+    for(const c of cols){ const ox=e.x-c.x, oy=e.y-c.y, rr=c.r+R, d=Math.hypot(ox,oy); if(d<rr){ if(d>1e-4){ const p=rr-d; e.x+=ox/d*p; e.y+=oy/d*p; } else e.x+=rr; } } }
 
   /* ---- collision: walls block MONKEYS only; the river just slows the keeper ---- */
   collideWalls(e,r){ if(!this.wallBlocks||!this.wallBlocks.length) return; const WR=CONFIG.build.wall.foot, rr=WR+r;
