@@ -58,13 +58,14 @@ class Game{
     if(this.occupied(x,y, C.snap*0.9)) return 'Blocked — too close to another build';
     return null; }
   canPlace(type,x,y){ return !this.placeError(type,x,y); }
-  placeAt(gp){ if(!this.tool){ this.toast('Pick a tool to build'); return; }
+  buildLog(r,gp){ const a=(window.__buildLog=window.__buildLog||[]); a.push({tool:this.tool,gp:gp&&{x:gp.x,y:gp.y},result:r,bananas:Math.floor(this.bananas)}); if(a.length>40) a.shift(); }
+  placeAt(gp){ if(!this.tool){ this.toast('Pick a tool to build'); this.buildLog('no-tool',gp); return; }
     const err=this.placeError(this.tool,gp.x,gp.y);
-    if(err){ this.toast(err); SFX.hurt(); return; }
+    if(err){ this.toast(err); SFX.hurt(); this.buildLog('blocked: '+err,gp); return; }
     const def=CONFIG.build[this.tool]; this.bananas-=def.cost(1); this.render.updateCore(Math.floor(this.bananas));
     if(def.wall) this.wallBlocks.push({x:gp.x,y:gp.y});
     else { this.structures.push({type:this.tool,x:gp.x,y:gp.y,level:1}); this.rebuildDerived(); }
-    this.render.drawTerritory(this); this.render.burst(gp.x,gp.y,ACCENT.gold); this.toast('Built '+def.name+' · -'+def.cost(1)); SFX.build(); }
+    this.render.drawTerritory(this); this.render.burst(gp.x,gp.y,ACCENT.gold); this.toast('Built '+def.name+' · -'+def.cost(1)); this.buildLog('built '+def.name,gp); SFX.build(); }
   placeTool(){ this.placeAt(this.ghostPos()); }
   upgradeTarget(){ if(this.tool) return null; let best=null,bd=CONFIG.hero.buildReach; const h=this.hero;
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
@@ -147,13 +148,15 @@ class Game{
     const setAim=(px,py)=>{ if(this.tool) this.aimPt=this.render.screenToWorld(px,py); };  // ghost follows cursor/finger
     const down=(px,py,id)=>{ this.joy.active=true; this.joy.id=id; this.joy.ox=px; this.joy.oy=py; this.joy.dx=0; this.joy.dy=0; stick.style.left=px+'px'; stick.style.top=py+'px'; stick.classList.remove('hidden'); nub.style.transform='translate(-50%,-50%)';
       this._tap={x:px,y:py,moved:false}; setAim(px,py); };
-    const move=(px,py)=>{ setAim(px,py); if(this._tap && Math.hypot(px-this._tap.x,py-this._tap.y)>11) this._tap.moved=true; if(!this.joy.active) return; let dx=px-this.joy.ox,dy=py-this.joy.oy; const max=54,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} this.joy.dx=dx/max; this.joy.dy=dy/max; nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`; };
+    const move=(px,py)=>{ if(this._tap && Math.hypot(px-this._tap.x,py-this._tap.y)>11) this._tap.moved=true; if(!this.joy.active) return; let dx=px-this.joy.ox,dy=py-this.joy.oy; const max=54,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} this.joy.dx=dx/max; this.joy.dy=dy/max; nub.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`; };
     const up=()=>{ if(this._tap && !this._tap.moved && (this.phase==='play'||this.phase==='truck')){ if(this.tool) this.placeTool(); else this.toast('Pick a tool to build'); } this._tap=null;
       this.joy.active=false; this.joy.dx=0; this.joy.dy=0; stick.classList.add('hidden'); };
     cv.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; down(t.clientX,t.clientY,t.identifier); e.preventDefault(); },{passive:false});
     cv.addEventListener('touchmove',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) move(t.clientX,t.clientY); } e.preventDefault(); },{passive:false});
     cv.addEventListener('touchend',e=>{ for(const t of e.changedTouches){ if(t.identifier===this.joy.id) up(); } }); cv.addEventListener('touchcancel',up);
-    cv.addEventListener('mousedown',e=>down(e.clientX,e.clientY,'m')); addEventListener('mousemove',e=>move(e.clientX,e.clientY)); addEventListener('mouseup',up);
+    cv.addEventListener('mousedown',e=>down(e.clientX,e.clientY,'m'));
+    cv.addEventListener('mousemove',e=>setAim(e.clientX,e.clientY));   // aim only updates over the play area, NOT when the cursor is on the Build button/tray
+    addEventListener('mousemove',e=>move(e.clientX,e.clientY)); addEventListener('mouseup',up);
   }
   moveHero(dt){ const h=this.hero,C=CONFIG; let mx=(this.input.right?1:0)-(this.input.left?1:0), my=(this.input.down?1:0)-(this.input.up?1:0);
     if(this.joy.active&&(this.joy.dx||this.joy.dy)){ mx=this.joy.dx; my=this.joy.dy; } const ml=Math.hypot(mx,my); if(ml>1){ mx/=ml; my/=ml; }
