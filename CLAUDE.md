@@ -11,9 +11,11 @@ files before assuming the theme.**
 - **Root = `Monkey Business`** (the active game): an **open-world** zoo-breach defense + **free-form
   base builder**. A follow-cam tracks a roaming zookeeper across a **chunk-streamed** world. You
   **start with only the banana pile + keeper** (no base) and **build it out yourself** — pick a tool
-  from the bottom tray, walk to a spot, tap **Build** to place it and pay coins. **No plots, no grid.**
-  Place towers, a **banana farm** (passive coin income), and **paid wall blocks** (leave gaps for
-  gates); upgrade by standing on a structure and tapping Upgrade. Net the monkeys (trap, never harm)
+  from the bottom tray, walk to a spot, tap **Build** to place it and pay **bananas**. **No plots, no grid.**
+  **Bananas are the ONE resource — money AND lives** (the pile = your treasury); spend to build, monkeys
+  steal them, lose at zero. Place towers, **banana farms** (passive income, but ONLY when chained to the
+  pile by **Supply Lines** — logistics), and **paid wall blocks** (leave gaps for gates); upgrade by
+  standing on a structure and tapping Upgrade. Net the monkeys (trap, never harm)
   that raid the pile; a wave-end truck carts trapped ones home, paying a bounty and returning any
   banana they grabbed. Monkeys come from **fixed themed spawn points** — Jungle (SW), then Mountains
   (NE), then the Zoo gate (E) — across **100 waves** (boss every 10th). Lose when the pile empties.

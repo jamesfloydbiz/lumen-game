@@ -23,7 +23,7 @@ class Game{
 
   /* ---- run lifecycle ---- */
   beginRun(){ SFX.resume(); const C=CONFIG;
-    this.coins=C.startCoins; this.bananas=C.bananas; this.wave=0; this.ecoRate=0; this._frontiers=[];
+    this.bananas=C.bananas; this.wave=0; this.ecoRate=0; this._frontiers=[];   // bananas = the one resource (treasury + lives)
     this.unlocked=new Set(C.startUnlocks); this.tool=null;
     this.structures=[]; this.wallBlocks=[];
     this.monkeys=[]; this.nets=[]; this.trainees=[];
@@ -40,7 +40,7 @@ class Game{
     this.chips={};
     for(const type of CONFIG.toolOrder){ const def=CONFIG.build[type];
       const el=document.createElement('button'); el.className='toolchip'; el.dataset.type=type;
-      el.innerHTML=`<span class="tc-name">${def.name}</span><span class="tc-cost"><span class="coin-dot sm"></span>${def.cost(1)}</span>`;
+      el.innerHTML=`<span class="tc-name">${def.name}</span><span class="tc-cost"><span class="banana-dot sm"></span>${def.cost(1)}</span>`;
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
   selectTool(type){ if(!this.unlocked.has(type)) return; this.tool = (this.tool===type)?null:type; }
@@ -49,30 +49,38 @@ class Game{
   occupied(x,y,minD){ for(const s of this.structures){ if(U.dist(x,y,s.x,s.y)<minD) return true; } for(const w of this.wallBlocks){ if(U.dist(x,y,w.x,w.y)<minD) return true; } return false; }
   inWater(x,y){ const w=CONFIG.water; return w && x>w.x-w.halfW && x<w.x+w.halfW && y>w.z0 && y<w.z1; }
   canPlace(type,x,y){ const C=CONFIG, def=C.build[type]; if(!def) return false;
-    if(this.coins < def.cost(1)) return false;
+    if(this.bananas < def.cost(1)) return false;
     if(U.dist(x,y,C.core.x,C.core.y) < C.coreClear) return false;
     if(this.inWater(x,y)) return false;
     if(this.occupied(x,y, C.snap*0.9)) return false;
     return true; }
   placeTool(){ if(!this.tool) return; const gp=this.ghostPos(); if(!this.canPlace(this.tool,gp.x,gp.y)) return;
-    const def=CONFIG.build[this.tool]; this.coins-=def.cost(1);
+    const def=CONFIG.build[this.tool]; this.bananas-=def.cost(1); this.render.updateCore(Math.floor(this.bananas));
     if(def.wall) this.wallBlocks.push({x:gp.x,y:gp.y});
     else { this.structures.push({type:this.tool,x:gp.x,y:gp.y,level:1}); this.rebuildDerived(); }
     this.render.drawTerritory(this); SFX.build(); }
   upgradeTarget(){ if(this.tool) return null; let best=null,bd=CONFIG.hero.buildReach; const h=this.hero;
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
-  doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.coins<cost) return;
-    this.coins-=cost; s.level++; s._dirty=true; this.rebuildDerived(); SFX.build(); }
+  doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost) return;
+    this.bananas-=cost; this.render.updateCore(Math.floor(this.bananas)); s.level++; s._dirty=true; this.rebuildDerived(); SFX.build(); }
 
   rebuildDerived(){ this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[]; this.trainees=[]; this.ecoRate=0;
-    for(const p of this.structures){ const s=CONFIG.build[p.type].stat(p.level);
+    const roads=[], farmList=[];
+    for(const p of this.structures){ if(p.type==='supply'){ roads.push(p); continue; } const s=CONFIG.build[p.type].stat(p.level);
       if(p.type==='net') this.netTowers.push({x:p.x,y:p.y,range:s.range,rate:s.rate,cd:0});
       else if(p.type==='decoy') this.decoys.push({x:p.x,y:p.y,pull:s.pull});
       else if(p.type==='cage') this.cages.push({x:p.x,y:p.y,r:s.r,cd:s.cd,timer:0});
       else if(p.type==='mud') this.muds.push({x:p.x,y:p.y,r:s.r,slow:s.slow});
-      else if(p.type==='farm'){ this.farms.push({x:p.x,y:p.y}); this.ecoRate+=s.eco; }
+      else if(p.type==='farm'){ this.farms.push(p); farmList.push(p); }
       else if(p.type==='trainee'){ for(let i=0;i<s.count;i++){ const a=i/s.count*TAU; this.trainees.push({hx:p.x,hy:p.y,x:p.x+Math.cos(a)*3,y:p.y+Math.sin(a)*3,range:s.range,rate:s.rate,speed:s.speed,cd:U.rand(0,1),tx:p.x,ty:p.y,roamT:0,aim:0,moving:false,wob:U.rand(TAU),mesh:null}); } } }
+    this.computeSupply(roads, farmList);
+    for(const f of farmList){ if(f.connected) this.ecoRate += CONFIG.build.farm.stat(f.level).eco; }
   }
+  // BFS from the core over Supply Lines; a farm only produces if a chain reaches it
+  computeSupply(roads, farms){ const L2=CONFIG.linkDist*CONFIG.linkDist, nodes=[{x:CONFIG.core.x,y:CONFIG.core.y}].concat(roads);
+    const reached=new Array(nodes.length).fill(false); reached[0]=true; const q=[0];
+    while(q.length){ const i=q.shift(); for(let j=0;j<nodes.length;j++){ if(!reached[j] && U.dist2(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y)<=L2){ reached[j]=true; q.push(j); } } }
+    for(const f of farms){ f.connected=false; for(let j=0;j<nodes.length;j++){ if(reached[j] && U.dist2(f.x,f.y,nodes[j].x,nodes[j].y)<=L2){ f.connected=true; break; } } } }
 
   /* ---- waves ---- */
   checkUnlocks(){ const t=CONFIG.unlockByWave[this.wave]; if(t && !this.unlocked.has(t)){ this.unlocked.add(t); this.toast('Unlocked: '+CONFIG.build[t].name); SFX.unlock(); } }
@@ -100,12 +108,12 @@ class Game{
     document.getElementById('endTitle').textContent='The pile is gone';
     document.getElementById('endText').textContent='The last banana was carried off. Wall in the pile sooner and ring it with nets.';
     this.fillEnd(this.wave, true); document.getElementById('againBtn').textContent='Try again'; document.getElementById('end').classList.remove('hidden'); }
-  fillEnd(wave, dead){ document.getElementById('eWave').textContent=wave; document.getElementById('eBananas').textContent=dead?0:this.bananas;
-    document.getElementById('eCoins').textContent=Math.floor(this.coins); document.getElementById('ePlots').textContent=this.structures.length+this.wallBlocks.length; }
+  fillEnd(wave, dead){ document.getElementById('eWave').textContent=wave; document.getElementById('eBananas').textContent=dead?0:Math.floor(this.bananas);
+    document.getElementById('ePlots').textContent=this.structures.length+this.wallBlocks.length; }
   togglePause(f){ if(this.phase!=='play'&&this.phase!=='pause'&&this.phase!=='truck') return;
     if(f===undefined) f=this.phase!=='pause';
     if(f){ this._prePause=this.phase; this.phase='pause';
-      document.getElementById('pWave').textContent=this.wave+' / '+CONFIG.totalWaves; document.getElementById('pBananas').textContent=this.bananas; document.getElementById('pCoins').textContent=Math.floor(this.coins);
+      document.getElementById('pWave').textContent=this.wave+' / '+CONFIG.totalWaves; document.getElementById('pBananas').textContent=Math.floor(this.bananas);
       document.getElementById('pause').classList.remove('hidden'); }
     else { this.phase=this._prePause||'play'; document.getElementById('pause').classList.add('hidden'); } }
 
@@ -161,7 +169,7 @@ class Game{
         if(d<2.6){ m.state='grab'; m.grabT=m.def.grab; }
         else { m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt; }
       } else if(m.state==='grab'){
-        m.grabT-=dt; if(m.grabT<=0){ if(m.target.kind==='pile' && this.bananas>0){ this.bananas--; this.render.updateCore(this.bananas); m.carrying=true; if(this.bananas<=0) this.lose(); }
+        m.grabT-=dt; if(m.grabT<=0){ if(m.target.kind==='pile' && this.bananas>=1){ this.bananas-=1; this.render.updateCore(Math.floor(this.bananas)); m.carrying=true; if(this.bananas<1) this.lose(); }
           m.state='fleeing'; }
       } else if(m.state==='fleeing'){
         m.face=U.ang(m.x,m.y,m.sx,m.sy); m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt;
@@ -195,7 +203,7 @@ class Game{
     if(tr.stage==='in'){ tr.y=U.approach(tr.y,-9,22,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y>=-9.5) tr.stage='load';
     } else if(tr.stage==='load'){ this.render.setTruck(true,tr.x,tr.y,0); tr.loadT-=dt;
       if(tr.loadT<=0){ const m=this.monkeys.find(mm=>mm.state==='trapped');
-        if(m){ this.coins+=m.def.bounty; if(m.carrying){ this.bananas++; this.render.updateCore(this.bananas); } this.render.coinPop(m.x,m.y+3); this.render.removeMonkeyMesh(m); this.monkeys.splice(this.monkeys.indexOf(m),1); tr.loadT=0.2; SFX.pickup(); }
+        if(m){ this.bananas+=m.def.bounty; if(m.carrying) this.bananas++; this.render.updateCore(Math.floor(this.bananas)); this.render.coinPop(m.x,m.y+3); this.render.removeMonkeyMesh(m); this.monkeys.splice(this.monkeys.indexOf(m),1); tr.loadT=0.2; SFX.pickup(); }
         else tr.stage='out'; }
     } else { const ext=this.baseRadius(); tr.y=U.approach(tr.y,-(ext+20),26,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y<=-(ext+19)){ this.render.setTruck(false); this.endTruck(); } }
   }
@@ -203,28 +211,28 @@ class Game{
 
   /* ---- loop ---- */
   update(dt){ this.time+=dt; this.moveHero(dt);
-    if(this.ecoRate) this.coins+=this.ecoRate*dt;
+    if(this.ecoRate) this.bananas+=this.ecoRate*dt;   // connected farms grow the pile
     if(this.phase==='truck'){ this.updateTrainees(dt); this.updateTowers(dt); this.updateNets(dt); this.updateMonkeys(dt); this.updateTruck(dt); this.syncHUD(); return; }
     if(this.spawnQueue.length){ this.spawnTimer-=dt; if(this.spawnTimer<=0){ this.spawn(this.spawnQueue.shift()); this.spawnTimer=this.spawnInterval; } }
     this.updateMonkeys(dt); this.updateTowers(dt); this.updateTrainees(dt); this.updateNets(dt);
     this.hero.cd-=dt; const tgt=this.nearestActive(this.hero.x,this.hero.y,CONFIG.hero.netRange);
     if(tgt){ this.hero.aim=U.ang(this.hero.x,this.hero.y,tgt.x,tgt.y); if(this.hero.cd<=0){ this.hero.cd=1/CONFIG.hero.netRate; this.fireNet(this.hero.x,this.hero.y,tgt); } }
-    if(this.bananas<=0){ this.lose(); return; }
+    if(this.bananas<1){ this.lose(); return; }
     if(this.spawnQueue.length===0 && this.activeMonkeys()===0){ if(this.monkeys.length) this.startTruck(); else this.nextWave(); }
     this.syncHUD();
   }
   syncHUD(){ const $=i=>document.getElementById(i);
-    $('waveNum').textContent=this.wave+'/'+CONFIG.totalWaves; $('bananaNum').textContent=this.bananas;
-    $('coinNum').textContent=Math.floor(this.coins); $('ecoNum').textContent='+'+this.ecoRate.toFixed(1); $('plotNum').textContent=this.structures.length+this.wallBlocks.length;
-    this.syncTray(); }
+    $('waveNum').textContent=this.wave+'/'+CONFIG.totalWaves; $('bananaNum').textContent=Math.floor(this.bananas);
+    $('ecoNum').textContent=(this.ecoRate>0?'+':'')+this.ecoRate.toFixed(1); $('plotNum').textContent=this.structures.length+this.wallBlocks.length;
+    this.render.updateCore(Math.floor(this.bananas)); this.syncTray(); }
   syncTray(){ if(!this.chips) return; const C=CONFIG;
-    for(const type in this.chips){ const el=this.chips[type], def=C.build[type], locked=!this.unlocked.has(type), poor=this.coins<def.cost(1);
+    for(const type in this.chips){ const el=this.chips[type], def=C.build[type], locked=!this.unlocked.has(type), poor=this.bananas<def.cost(1);
       el.classList.toggle('locked',locked); el.classList.toggle('poor',!locked&&poor); el.classList.toggle('sel',this.tool===type); }
     const bb=document.getElementById('buildBtn'), ub=document.getElementById('upgradeBtn'), cb=document.getElementById('cancelBtn');
     if(this.tool){ const gp=this.ghostPos(), ok=this.canPlace(this.tool,gp.x,gp.y); bb.classList.remove('hidden'); cb.classList.remove('hidden'); ub.classList.add('hidden');
       bb.classList.toggle('off',!ok); bb.innerHTML=`Build <b>${C.build[this.tool].name}</b>`; }
     else { bb.classList.add('hidden'); cb.classList.add('hidden'); const t=this.upgradeTarget();
-      if(t){ const cost=C.build[t.type].cost(t.level+1); ub.classList.remove('hidden'); ub.classList.toggle('off',this.coins<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; }
+      if(t){ const cost=C.build[t.type].cost(t.level+1); ub.classList.remove('hidden'); ub.classList.toggle('off',this.bananas<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; }
       else ub.classList.add('hidden'); } }
   banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span>`+(n?`<span class="wb-s">${n}</span>`:''); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
   toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove('show'),1900); }

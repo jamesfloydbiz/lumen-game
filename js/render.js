@@ -172,7 +172,8 @@ class Renderer{
   makeWallBlock(){ const g=new THREE.Group();
     const base=new THREE.Mesh(new THREE.BoxGeometry(5.4,2.6,5.4),this.mat(0x9a6a3b,{flat:true,r:0.8})); base.position.y=1.3; base.castShadow=true; base.receiveShadow=true; g.add(base);
     const cap=new THREE.Mesh(new THREE.BoxGeometry(5.9,0.6,5.9),this.mat(0x7a5128,{flat:true})); cap.position.y=2.7; cap.castShadow=true; g.add(cap); return g; }
-  syncStructures(list){ for(const s of list){ if(!s.mesh || s._dirty){ if(s.mesh){ this.structGroup.remove(s.mesh); this.disposeGroup(s.mesh); } s.mesh=this.makeTower(s.type,s.level); s.mesh.position.set(s.x,0,s.y); this.structGroup.add(s.mesh); s._dirty=false; } } }
+  syncStructures(list){ for(const s of list){ if(!s.mesh || s._dirty){ if(s.mesh){ this.structGroup.remove(s.mesh); this.disposeGroup(s.mesh); } s.mesh=this.makeTower(s.type,s.level); s.mesh.position.set(s.x,0,s.y); this.structGroup.add(s.mesh); s._dirty=false; }
+    if(s.type==='farm' && s.mesh.userData.warn) s.mesh.userData.warn.visible = !s.connected; } }
   syncWalls(list){ for(const w of list){ if(!w.mesh){ w.mesh=this.makeWallBlock(); w.mesh.position.set(w.x,0,w.y); this.wallGroup.add(w.mesh); } } }
   setGhost(type,x,y,valid){ const foot=CONFIG.build[type].foot;
     if(!this.ghost || this.ghost.userData.type!==type){ if(this.ghost){ this.ghostGroup.remove(this.ghost); this.disposeGroup(this.ghost); }
@@ -234,7 +235,10 @@ class Renderer{
     else if(type==='farm'){ const plotM=new THREE.Mesh(new THREE.BoxGeometry(5,0.4,5),this.mat(0x6e4a24)); plotM.position.y=0.2; g.add(plotM);
       for(let r0=0;r0<3;r0++) for(let c0=0;c0<3;c0++){ const stalk=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,1.6,5),this.mat(0x4f9e36)); stalk.position.set(-1.6+c0*1.6,1.0,-1.6+r0*1.6); g.add(stalk);
         const nub=new THREE.Mesh(new THREE.SphereGeometry(0.4,8,6),this.mat(0xffcf33)); nub.position.set(-1.6+c0*1.6,1.9,-1.6+r0*1.6); g.add(nub); }
-      const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,2.6+lv*0.4,12),this.mat(0xddae5a)); silo.position.set(2.6,1.3+lv*0.2,2.6); silo.castShadow=true; g.add(silo); }
+      const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,2.6+lv*0.4,12),this.mat(0xddae5a)); silo.position.set(2.6,1.3+lv*0.2,2.6); silo.castShadow=true; g.add(silo);
+      const warn=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xff5a4a,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); warn.scale.set(3.2,3.2,1); warn.position.y=6.2; warn.visible=false; g.add(warn); g.userData.warn=warn; }
+    else if(type==='supply'){ const tile=new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.8,0.4,8),this.mat(0xa9824e,{flat:true})); tile.position.y=0.2; tile.receiveShadow=true; g.add(tile);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(1.0,0.18,6,10),this.mat(0xc8a25a)); ring.rotation.x=Math.PI/2; ring.position.y=0.55; g.add(ring); }
     else if(type==='trainee'){ const tent=new THREE.Mesh(new THREE.ConeGeometry(2.4,3,4),this.mat(0x6ea83a,{flat:true})); tent.rotation.y=Math.PI/4; tent.position.y=1.5; tent.castShadow=true; g.add(tent);
       const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.8,1.0),this.mat(0x8ed24a,{e:0.2})); flag.position.set(0,3.3,0.5); g.add(flag); }
     if(lv>1){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.32,8,6),this.mat(ACCENT.gold,{e:0.3})); pip.position.set(0,6.2,0); g.add(pip); }

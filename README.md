@@ -14,22 +14,24 @@ bun run serve        # → http://localhost:4173   (Monkey Business is the root 
 ```
 
 - **Roam** the zookeeper with `WASD` / arrows, or drag for a floating joystick — the camera follows.
-- **Claim land** — stand on a glowing claim flag and pour coins in to annex that plot; the base grows
-  with **walls** and new build pads in whatever direction you expand.
-- **Build** — stand on a pad and your coins pour in until it builds/upgrades.
+- **Build** — there's no grid: pick a tool from the tray, walk to a spot, tap **Build** to place it ahead of
+  you. Pay in **bananas**. Stand on a structure to **Upgrade** it.
+- **Bananas are everything** — they're your **money AND your lives** (the pile). Spend them to build, and
+  monkeys steal them. Lose at zero.
+- **Logistics** — **Banana Farms** only produce when a chain of **Supply Lines** links them back to the pile.
 - **Auto-net** — you (and your towers and keepers) fire nets at the nearest monkey automatically.
-- **Earn** — a **Banana Farm** drips passive coins, and every monkey the truck carts home pays a bounty.
 
 ## The loop
 
-Monkeys pour out of the wilderness on every side, race to the **banana pile** at the world's heart,
-grab a banana and flee back out. A banana that escapes is gone for good; a **carrier you trap** gets
-its banana returned when the truck loads it. Lose all your bananas → game over.
+Monkeys emerge from **fixed spawn points** (jungle, then mountains, then the zoo), race to the **banana
+pile** at the world's heart, grab a banana and flee. A banana that escapes is gone; a **carrier you trap**
+gets its banana returned when the truck loads it, plus a bounty. Lose all your bananas → game over.
 
-**Build pads (the towers):**
+**Towers & buildings (place freely, pay in bananas):**
 - **Net Tower** — auto-fires nets at the nearest raider.
+- **Wall** / **Supply Line** — paid blocks: wall in the pile (gaps are gates); chain supply to power farms.
 - **Trainee Keeper** — hires roaming keepers who patrol and net monkeys (more per level).
-- **Banana Farm** — grows bananas into a steady passive coin income.
+- **Banana Farm** — grows bananas — **only when connected to the pile by Supply Lines**.
 - **Banana Decoy** — a fake pile; monkeys grab it and flee empty-handed (bend the flow).
 - **Cage Trap** — snaps shut on monkeys that wander across it.
 - **Mud Patch** — slows monkeys crossing it, so more nets land.

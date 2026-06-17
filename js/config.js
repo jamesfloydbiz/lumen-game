@@ -14,9 +14,8 @@ const CONFIG = {
   /* ---- world / streaming ---- */
   chunk: 46, viewChunks: 3, worldClamp: 460,
 
-  core: {x:0, y:0},            // the banana pile — lose when it empties
-  bananas: 30,
-  startCoins: 55,
+  core: {x:0, y:0},            // the banana pile — your ONE resource: treasury AND lives. Lose when it empties.
+  bananas: 80,
 
   hero: { speed:15, netRange:19, netRate:1.7, netSpeed:38, radius:1.4, buildReach:3.4 },
 
@@ -25,15 +24,18 @@ const CONFIG = {
   placeAhead: 6,               // ghost sits this far in front of the keeper (so you never build under/on yourself)
   coreClear: 9,                // keep-clear radius around the pile
   waterSlow: 0.45,             // wade speed multiplier when crossing the stream off-bridge
+  linkDist: 14,                // max gap a Supply Line bridges (core ↔ supply ↔ farm) to count as connected
 
   /* ---- build catalogue (towers + farm + wall). Placed for cost(1), upgraded for cost(lv+1). ---- */
   build: {
     net:     { name:'Net Tower',     accent:'net',  max:5, foot:2.6, cost:(lv)=>[8,14,24,40,62][lv-1],
                stat:(lv)=>({range:13+lv*2.4, rate:0.9+lv*0.4}), blurb:'Auto-nets the nearest raider.' },
     farm:    { name:'Banana Farm',   accent:'gold', max:5, foot:3.0, cost:(lv)=>[14,26,44,70,100][lv-1],
-               stat:(lv)=>({eco:0.7+lv*0.7}), blurb:'Passive coin income.' },
+               stat:(lv)=>({eco:1.2+lv*0.8}), blurb:'Grows bananas — only when linked to the pile by Supply Lines.' },
     wall:    { name:'Wall',          accent:'wood', max:1, foot:3.2, cost:()=>4, wall:true,
                stat:()=>({}), blurb:'A solid block — wall in the pile. Leave gaps for gates.' },
+    supply:  { name:'Supply Line',   accent:'wood', max:1, foot:1.8, cost:()=>2, supply:true,
+               stat:()=>({}), blurb:'A cheap link. Chain from the pile to a farm to power it.' },
     trainee: { name:'Trainee Keeper', accent:'lime', max:4, foot:2.6, cost:(lv)=>[16,30,52,82][lv-1],
                stat:(lv)=>({count:lv, range:14+lv*1.5, rate:1.0+lv*0.25, speed:9+lv}), blurb:'Roaming keepers who net on patrol.' },
     cage:    { name:'Cage Trap',     accent:'net',  max:4, foot:2.8, cost:(lv)=>[16,30,48,72][lv-1],
@@ -44,7 +46,7 @@ const CONFIG = {
                stat:(lv)=>({slow:0.55-lv*0.11, r:5+lv*1.1}), blurb:'Slows monkeys crossing it.' },
   },
   // the order tools appear in the tray
-  toolOrder: ['net','wall','farm','trainee','cage','decoy','mud'],
+  toolOrder: ['net','wall','supply','farm','trainee','cage','decoy','mud'],
 
   /* ---- fixed, themed spawn points (act-gated). Monkeys emerge here & head for the pile. ---- */
   regions: {
@@ -64,7 +66,7 @@ const CONFIG = {
   water: { x:-63, halfW:5, z0:-150, z1:150, bridgeHalf:8 },
 
   /* ---- progressive unlocks — start minimal, earn new tools by surviving waves ---- */
-  startUnlocks: ['net','farm','wall'],
+  startUnlocks: ['net','wall','supply','farm'],
   unlockByWave: { 2:'trainee', 4:'cage', 6:'decoy', 8:'mud' },
 
   /* ---- monkey archetypes ---- */

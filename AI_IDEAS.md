@@ -4,9 +4,14 @@ Claude's running list of ways to deepen the game **without changing the core mod
 keeper, freely place/upgrade paid towers + walls, defend the pile, claim territory, survive 100
 waves). One line each. Promote to a task when one earns it. See also [IDEAS.md](IDEAS.md) (James's box).
 
+## Adopted (now core)
+- **Single banana economy** — bananas are money AND lives; spend to build, monkeys steal them, lose at zero. *(built)*
+- **Logistics / supply lines** — farms only produce when chained to the pile by Supply Lines. *(built)*
+- **Neutral monkey camps** — claimable points out in the world that expand territory + income. *(next)*
+
 ## Economy / tycoon depth
-- **Territory income** — passive coins scale with claimed-territory area, so expanding turf pays (openfront economy).
-- **Wild banana groves** — tappable resource nodes out in the biomes you build toward for coin bursts.
+- **Territory income** — passive bananas scale with claimed-territory area, so expanding turf pays (openfront economy).
+- **Wild banana groves** — tappable resource nodes out in the biomes you build toward for banana bursts.
 - **Banana bank (meta)** — bank surplus bananas between runs for a permanent starting bonus next run.
 - **Upkeep tension** — very large bases cost a small per-wave upkeep, pushing you to defend efficiently, not sprawl.
 
@@ -28,12 +33,11 @@ waves). One line each. Promote to a task when one earns it. See also [IDEAS.md](
 - **Frontier banners** — show a countdown + arrow at the spawn that's about to go live.
 
 ## Progression / meta
-- **Between-wave shop** — spend coins on permanent perks (faster keeper, cheaper walls, bigger pile, +trainee).
-- **Unlock tree** — milestone waves grant choices ("pick one: Cage or Decoy next") for replay variety.
 - **Daily seed / score** — a fixed wave seed with a shareable "waves survived" score.
+- *(rejected by James: between-wave shop, unlock tree — keep building/upgrading purely in-world.)*
 
 ## Juice / feel (cheap, high-impact)
-- **Coin magnet** — bounty coins fly to the keeper with a satisfying chime and number popup.
+- **Banana magnet** — returned bananas fly to the pile with a satisfying chime and number popup.
 - **Trap pop** — a squashy bounce + net-snap SFX + screen-shake on boss traps.
 - **Build/upgrade poof** — dust ring + scale-bounce when a structure goes down or levels up.
 - **Day/night drift** — slow lighting cycle; night waves run a touch faster for mood + modifier.
