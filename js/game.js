@@ -12,7 +12,7 @@ class Game{
   constructor(){
     this.canvas=document.getElementById('game');
     this.render=new Renderer(this.canvas,this);
-    this.hero={x:0,y:13,aim:-Math.PI/2,moving:false,cd:0};
+    this.hero={x:0,y:13,aim:-Math.PI/2,face:-Math.PI/2,moving:false,cd:0};
     this.input={up:false,down:false,left:false,right:false}; this.joy={active:false,ox:0,oy:0,dx:0,dy:0,id:null};
     this.phase='menu'; this.time=0; this.last=performance.now(); this.tool=null;
     this.structures=[]; this.wallBlocks=[];
@@ -29,7 +29,7 @@ class Game{
     this.monkeys=[]; this.nets=[]; this.trainees=[];
     this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[];
     this.render.resetBase(); this.render.updateCore(this.bananas); this.render.closeZooGate(); this.render.drawTerritory(this);
-    this.hero={x:0,y:13,aim:-Math.PI/2,moving:false,cd:0};
+    this.hero={x:0,y:13,aim:-Math.PI/2,face:-Math.PI/2,moving:false,cd:0};
     ['start','end'].forEach(id=>document.getElementById(id).classList.add('hidden'));
     document.getElementById('hud').classList.remove('hidden'); document.getElementById('build').classList.remove('hidden');
     this.buildTray(); this.nextWave();
@@ -44,7 +44,8 @@ class Game{
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
   selectTool(type){ if(!this.unlocked.has(type)) return; this.tool = (this.tool===type)?null:type; }
-  ghostPos(){ const s=CONFIG.snap; return {x:Math.round(this.hero.x/s)*s, y:Math.round(this.hero.y/s)*s}; }
+  ghostPos(){ const s=CONFIG.snap, a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
+    return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
   occupied(x,y,minD){ for(const s of this.structures){ if(U.dist(x,y,s.x,s.y)<minD) return true; } for(const w of this.wallBlocks){ if(U.dist(x,y,w.x,w.y)<minD) return true; } return false; }
   inWater(x,y){ const w=CONFIG.water; return w && x>w.x-w.halfW && x<w.x+w.halfW && y>w.z0 && y<w.z1; }
   canPlace(type,x,y){ const C=CONFIG, def=C.build[type]; if(!def) return false;
@@ -130,16 +131,16 @@ class Game{
   }
   moveHero(dt){ const h=this.hero,C=CONFIG; let mx=(this.input.right?1:0)-(this.input.left?1:0), my=(this.input.down?1:0)-(this.input.up?1:0);
     if(this.joy.active&&(this.joy.dx||this.joy.dy)){ mx=this.joy.dx; my=this.joy.dy; } const ml=Math.hypot(mx,my); if(ml>1){ mx/=ml; my/=ml; }
-    h.moving=ml>0.1; const lim=C.worldClamp; h.x=U.clamp(h.x+mx*C.hero.speed*dt,-lim,lim); h.y=U.clamp(h.y+my*C.hero.speed*dt,-lim,lim);
-    this.collideWalls(h,C.hero.radius); this.collideWater(h);
-    if(h.moving) h.aim=U.ang(0,0,mx,my);
+    h.moving=ml>0.1; if(h.moving){ h.aim=U.ang(0,0,mx,my); h.face=h.aim; }   // face = travel heading, drives the build ghost
+    const wading=this.inWater(h.x,h.y) && Math.abs(h.y)>C.water.bridgeHalf;   // off-bridge crossing is slow, not blocked
+    const spd=C.hero.speed*(wading?C.waterSlow:1), lim=C.worldClamp;
+    h.x=U.clamp(h.x+mx*spd*dt,-lim,lim); h.y=U.clamp(h.y+my*spd*dt,-lim,lim);
+    this.collideWalls(h,C.hero.radius);
   }
 
-  /* ---- collision ---- */
+  /* ---- collision (walls only; the river just slows you) ---- */
   collideWalls(e,r){ if(!this.wallBlocks||!this.wallBlocks.length) return; const WR=CONFIG.build.wall.foot, rr=WR+r;
     for(const w of this.wallBlocks){ const ox=e.x-w.x, oy=e.y-w.y, d=Math.hypot(ox,oy); if(d<rr){ if(d>1e-4){ const p=rr-d; e.x+=ox/d*p; e.y+=oy/d*p; } else { e.x+=rr; } } } }
-  collideWater(h){ const w=CONFIG.water; if(!w||h.y<w.z0||h.y>w.z1||Math.abs(h.y)<w.bridgeHalf) return;
-    const R=CONFIG.hero.radius, left=w.x-w.halfW-R, right=w.x+w.halfW+R; if(h.x>left && h.x<right) h.x = (h.x<w.x)?left:right; }
 
   /* ---- monkeys ---- */
   spawn(type){ const def=CONFIG.monkeys[type]; const fr=this.frontiers||['jungle'];

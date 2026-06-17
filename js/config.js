@@ -22,8 +22,9 @@ const CONFIG = {
 
   /* ---- free placement ---- */
   snap: 5,                     // hidden grid the ghost snaps to (keeps walls tidy)
+  placeAhead: 6,               // ghost sits this far in front of the keeper (so you never build under/on yourself)
   coreClear: 9,                // keep-clear radius around the pile
-  placeGap: 0.78,             // min spacing between footprints (× sum of radii)
+  waterSlow: 0.45,             // wade speed multiplier when crossing the stream off-bridge
 
   /* ---- build catalogue (towers + farm + wall). Placed for cost(1), upgraded for cost(lv+1). ---- */
   build: {

@@ -17,8 +17,11 @@ class Renderer{
     r.outputEncoding=THREE.sRGBEncoding; r.toneMapping=THREE.NoToneMapping;
 
     const scene=this.scene=new THREE.Scene();
-    scene.background=new THREE.Color(0x8fd4ef);
-    scene.fog=new THREE.Fog(0xcdebe0, 300, 640);
+    scene.background=new THREE.Color(0x9bd8ef);
+    scene.fog=new THREE.Fog(0xd6efe2, 330, 680);
+    // gradient sky dome + soft image-based ambient (cartoon-realism depth)
+    this.skyTex=this.makeSkyTex(); this.sky=new THREE.Mesh(new THREE.SphereGeometry(780,28,18), new THREE.MeshBasicMaterial({map:this.skyTex,side:THREE.BackSide,fog:false})); scene.add(this.sky);
+    const envTex=this.makeSkyTex(); envTex.mapping=THREE.EquirectangularReflectionMapping; scene.environment=envTex;
 
     this.camera=new THREE.PerspectiveCamera(46,1,1,1400);
     this.camOff=new THREE.Vector3(0,64,49); this.camPos=new THREE.Vector3(0,64,60); this.camLook=new THREE.Vector3(0,0,0);
@@ -28,7 +31,8 @@ class Renderer{
     const sun=this.sun=new THREE.DirectionalLight(0xfff0cf, 1.25); sun.position.set(40,86,30); sun.castShadow=true;
     sun.shadow.mapSize.set(2048,2048); const sc=sun.shadow.camera; sc.near=20; sc.far=260; sc.left=-90; sc.right=90; sc.top=90; sc.bottom=-90; sun.shadow.bias=-0.0004;
     scene.add(sun); scene.add(sun.target);
-    const fill=new THREE.DirectionalLight(0xbfe0ff,0.25); fill.position.set(-40,40,-30); scene.add(fill);
+    const fill=new THREE.DirectionalLight(0xbfe0ff,0.22); fill.position.set(-40,40,-30); scene.add(fill);
+    const rim=new THREE.DirectionalLight(0xaad2ff,0.55); rim.position.set(-55,30,-65); scene.add(rim);   // cool back rim separates silhouettes
 
     this.grassTex=this.makeGrassTex(); this.glowTex=this.makeGlow();
 
@@ -47,6 +51,9 @@ class Renderer{
     this.worldGroup=new THREE.Group();
     scene.add(this.chunkGroup,this.structGroup,this.wallGroup,this.ghostGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.netGroup,this.fxGroup,this.worldGroup);
     this.fx=[];
+    // drifting dust motes for atmosphere
+    this.motes=new THREE.Group(); scene.add(this.motes); this._moteData=[];
+    for(let i=0;i<22;i++){ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xfff3cf,blending:THREE.AdditiveBlending,transparent:true,opacity:0,depthWrite:false})); const s=0.5+Math.random()*0.7; sp.scale.set(s,s,1); this.motes.add(sp); this._moteData.push({sp,ox:U.rand(-60,60),oy:U.rand(5,32),oz:U.rand(-60,60),ph:U.rand(TAU),v:U.rand(0.2,0.5)}); }
 
     this.coreGroup=new THREE.Group(); this.coreGroup.position.set(C.core.x,0,C.core.y); scene.add(this.coreGroup); this.buildCore(C.bananas);
     this.hero=this.makeHero(); scene.add(this.hero);
@@ -62,6 +69,9 @@ class Renderer{
     for(let i=0;i<2600;i++){ const g=Math.random(); x.fillStyle=g<0.5?'#5fa838':(g<0.8?'#4a8a2b':'#6cb842'); const s=1+Math.random()*2; x.fillRect(Math.random()*256,Math.random()*256,s,s); }
     const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(60,60); return t; }
   makeGlow(){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d'); const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.4,'rgba(255,230,150,0.6)'); g.addColorStop(1,'rgba(255,210,90,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); }
+  makeSkyTex(){ const c=document.createElement('canvas'); c.width=4; c.height=256; const x=c.getContext('2d'); const g=x.createLinearGradient(0,0,0,256);
+    g.addColorStop(0,'#6fb8e6'); g.addColorStop(0.44,'#a9dbf0'); g.addColorStop(0.62,'#dff1e6'); g.addColorStop(1,'#eaf3da'); x.fillStyle=g; x.fillRect(0,0,4,256); return new THREE.CanvasTexture(c); }
+  updateMotes(h,t){ if(!this._moteData) return; for(const m of this._moteData){ m.sp.position.set(h.x+m.ox+Math.sin(t*m.v+m.ph)*3, m.oy+Math.sin(t*0.5+m.ph)*1.6, h.y+m.oz+Math.cos(t*m.v*0.8+m.ph)*3); m.sp.material.opacity=0.09+0.06*Math.sin(t*1.2+m.ph); } }
 
   /* ---------- chunk streaming + biomes ---------- */
   seedRng(cx,cy){ let s=((cx*73856093)^(cy*19349663))>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
@@ -131,7 +141,7 @@ class Renderer{
   /* ---------- core pile ---------- */
   buildCore(n){ const g=this.coreGroup; while(g.children.length) g.remove(g.children[0]);
     const dirt=new THREE.Mesh(new THREE.CircleGeometry(6,28),this.mat(0xd8bd86,{r:1})); dirt.rotation.x=-Math.PI/2; dirt.position.y=0.06; g.add(dirt);
-    const show=Math.min(n,30), bMat=this.mat(0xffcf33,{r:0.5});
+    const show=Math.min(n,30), bMat=this.mat(0xffcf33,{r:0.38,m:0.12});
     for(let i=0;i<show;i++){ const a=i*2.39, rr=0.6+(i%5)*0.95, bx=Math.cos(a)*rr*0.85, bz=Math.sin(a)*rr*0.85, by=0.6+Math.floor(i/8)*1.0;
       const ban=new THREE.Mesh(THREE.CapsuleGeometry?new THREE.CapsuleGeometry(0.34,1.25,4,6):new THREE.CylinderGeometry(0.3,0.34,1.6,7), bMat);
       ban.position.set(bx,by,bz); ban.rotation.set(0,a,1.1+(i%3)*0.2); ban.castShadow=true; g.add(ban); }
@@ -197,8 +207,8 @@ class Renderer{
 
   /* ---------- monkeys ---------- */
   makeMonkey(type){ const def=CONFIG.monkeys[type], g=new THREE.Group(), r=def.r, m=this.mat(def.hex,{r:0.6}), dk=this.mat(0x3a2412);
-    const body=new THREE.Mesh(new THREE.SphereGeometry(r,14,12),m); body.scale.set(1,1.05,0.9); body.position.y=r; body.castShadow=true; g.add(body); g.userData.body=body;
-    const head=new THREE.Mesh(new THREE.SphereGeometry(r*0.72,14,12),m); head.position.set(0,r*2.05,r*0.2); head.castShadow=true; g.add(head);
+    const body=new THREE.Mesh(new THREE.SphereGeometry(r,18,15),m); body.scale.set(1,1.05,0.9); body.position.y=r; body.castShadow=true; g.add(body); g.userData.body=body;
+    const head=new THREE.Mesh(new THREE.SphereGeometry(r*0.72,18,14),m); head.position.set(0,r*2.05,r*0.2); head.castShadow=true; g.add(head);
     const face=new THREE.Mesh(new THREE.SphereGeometry(r*0.42,12,10),this.mat(0xe6c79a)); face.position.set(0,r*1.92,r*0.55); g.add(face);
     for(const sx of [-1,1]){ const ear=new THREE.Mesh(new THREE.SphereGeometry(r*0.3,8,6),m); ear.position.set(sx*r*0.72,r*2.25,r*0.1); g.add(ear);
       const eye=new THREE.Mesh(new THREE.SphereGeometry(r*0.1,6,6),this.mat(0x201008)); eye.position.set(sx*r*0.2,r*2.0,r*0.92); g.add(eye); }
@@ -255,6 +265,7 @@ class Renderer{
   /* ---------- camera ---------- */
   followCam(h,dt){ const k=Math.min(1,dt*4.2);
     this._terrPulse=(this._terrPulse||0)+dt; if(this.terrMesh) this.terrMesh.material.opacity=0.78+Math.sin(this._terrPulse*1.6)*0.12;
+    this.updateMotes(h,this._terrPulse);
     this.camLook.x=U.lerp(this.camLook.x,h.x,k); this.camLook.z=U.lerp(this.camLook.z,h.y,k);
     const tx=h.x+this.camOff.x, ty=this.camOff.y, tz=h.y+this.camOff.z;
     this.camera.position.x=U.lerp(this.camera.position.x,tx,k); this.camera.position.y=U.lerp(this.camera.position.y,ty,k); this.camera.position.z=U.lerp(this.camera.position.z,tz,k);
