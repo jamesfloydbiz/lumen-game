@@ -72,11 +72,13 @@ rebuilds the lists the sim reads (`netTowers`/`decoys`/`cages`/`muds`/`farms`/`t
 **Progressive unlocks** (`CONFIG.startUnlocks` = net/farm/wall; `unlockByWave` = trainee/cage/decoy/mud):
 `checkUnlocks()` in `nextWave` adds tools with a toast; the tray (`syncTray`) greys locked/unaffordable chips.
 
-**Walls & water are real collision.** Wall blocks (`game.wallBlocks`, radius `CONFIG.build.wall.foot`)
-and the stream (`CONFIG.water`, crossable only at the bridge gap) push entities out via `collideWalls`/
-`collideWater` (degenerate `d==0` pushes along an axis — don't drop it). Hero and **monkeys** both collide
-with walls (monkeys seek the pile and slide around blocks to the gaps you leave); `def.climb` monkeys
-(gorilla) ignore walls entirely. Players wall in the pile and leave gaps as gates.
+**Walls & water.** Wall blocks (`game.wallBlocks`, radius `CONFIG.build.wall.foot`) block **monkeys only**
+via `collideWalls` (they seek the pile and slide around blocks to the gaps you leave); `def.climb` monkeys
+(gorilla) ignore walls. **The keeper passes through his own walls** — do NOT collide the hero with walls,
+or laying a wall line is impossible (you place one ahead, then get stuck on it). The stream (`CONFIG.water`)
+isn't a wall: off the bridge it just **slows** the keeper to `CONFIG.waterSlow` (no push-out). Placement
+sits `CONFIG.placeAhead` in front of the keeper (via `hero.face`, the travel heading) so you never build on
+yourself. `collideWalls` handles degenerate `d==0` by pushing along an axis — keep it.
 
 **Spawn points are fixed & themed** (`CONFIG.regions[*].sx/sy`, act-gated by `CONFIG.acts`): Jungle (SW),
 Mountains (NE, wave 34), Zoo gate (E, wave 67). `spawn()` emits at the active region's point (+jitter);
