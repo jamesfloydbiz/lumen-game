@@ -48,13 +48,17 @@ class Game{
     return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
   occupied(x,y,minD){ for(const s of this.structures){ if(U.dist(x,y,s.x,s.y)<minD) return true; } for(const w of this.wallBlocks){ if(U.dist(x,y,w.x,w.y)<minD) return true; } return false; }
   inWater(x,y){ const w=CONFIG.water; return w && x>w.x-w.halfW && x<w.x+w.halfW && y>w.z0 && y<w.z1; }
-  canPlace(type,x,y){ const C=CONFIG, def=C.build[type]; if(!def) return false;
-    if(this.bananas < def.cost(1)) return false;
-    if(U.dist(x,y,C.core.x,C.core.y) < C.coreClear) return false;
-    if(this.inWater(x,y)) return false;
-    if(this.occupied(x,y, C.snap*0.9)) return false;
-    return true; }
-  placeTool(){ if(!this.tool) return; const gp=this.ghostPos(); if(!this.canPlace(this.tool,gp.x,gp.y)) return;
+  // returns null if placeable, else a short reason string (shown on the Build button + toast)
+  placeError(type,x,y){ const C=CONFIG, def=C.build[type]; if(!def) return 'Locked';
+    if(!this.unlocked.has(type)) return 'Locked — survive more waves';
+    if(this.bananas < def.cost(1)) return 'Need '+def.cost(1)+' bananas';
+    if(U.dist(x,y,C.core.x,C.core.y) < C.coreClear) return 'Too close to the pile';
+    if(this.inWater(x,y)) return "Can't build on the river";
+    if(this.occupied(x,y, C.snap*0.9)) return 'Blocked — too close to another build';
+    return null; }
+  canPlace(type,x,y){ return !this.placeError(type,x,y); }
+  placeTool(){ if(!this.tool) return; const gp=this.ghostPos(); const err=this.placeError(this.tool,gp.x,gp.y);
+    if(err){ this.toast(err); SFX.hurt(); return; }
     const def=CONFIG.build[this.tool]; this.bananas-=def.cost(1); this.render.updateCore(Math.floor(this.bananas));
     if(def.wall) this.wallBlocks.push({x:gp.x,y:gp.y});
     else { this.structures.push({type:this.tool,x:gp.x,y:gp.y,level:1}); this.rebuildDerived(); }
@@ -229,8 +233,8 @@ class Game{
     for(const type in this.chips){ const el=this.chips[type], def=C.build[type], locked=!this.unlocked.has(type), poor=this.bananas<def.cost(1);
       el.classList.toggle('locked',locked); el.classList.toggle('poor',!locked&&poor); el.classList.toggle('sel',this.tool===type); }
     const bb=document.getElementById('buildBtn'), ub=document.getElementById('upgradeBtn'), cb=document.getElementById('cancelBtn');
-    if(this.tool){ const gp=this.ghostPos(), ok=this.canPlace(this.tool,gp.x,gp.y); bb.classList.remove('hidden'); cb.classList.remove('hidden'); ub.classList.add('hidden');
-      bb.classList.toggle('off',!ok); bb.innerHTML=`Build <b>${C.build[this.tool].name}</b>`; }
+    if(this.tool){ const gp=this.ghostPos(), err=this.placeError(this.tool,gp.x,gp.y); bb.classList.remove('hidden'); cb.classList.remove('hidden'); ub.classList.add('hidden');
+      bb.classList.toggle('off',!!err); bb.innerHTML = err ? `<span class="why">${err}</span>` : `Build <b>${C.build[this.tool].name}</b>`; }
     else { bb.classList.add('hidden'); cb.classList.add('hidden'); const t=this.upgradeTarget();
       if(t){ const cost=C.build[t.type].cost(t.level+1); ub.classList.remove('hidden'); ub.classList.toggle('off',this.bananas<cost); ub.innerHTML=`Upgrade <b>${C.build[t.type].name}</b> · ${cost}`; }
       else ub.classList.add('hidden'); } }
