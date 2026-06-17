@@ -251,14 +251,29 @@ class Game{
     const d=U.dist(k.x,k.y,k.tx,k.ty); k.moving=d>0.4; if(k.moving){ const a=U.ang(k.x,k.y,k.tx,k.ty); k.x+=Math.cos(a)*k.speed*dt; k.y+=Math.sin(a)*k.speed*dt; if(!m) k.aim=a; } } }
 
   /* ---- truck (wave end) ---- */
-  startTruck(){ this.phase='truck'; const ext=this.baseRadius(); this.truck={stage:'in',x:0,y:-(ext+16),t:0,loadT:0}; SFX.turret(); }
-  updateTruck(dt){ const tr=this.truck;
-    if(tr.stage==='in'){ tr.y=U.approach(tr.y,-9,22,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y>=-9.5) tr.stage='load';
-    } else if(tr.stage==='load'){ this.render.setTruck(true,tr.x,tr.y,0); tr.loadT-=dt;
-      if(tr.loadT<=0){ let loaded=0, m;   // load a few per tick so wave-end isn't a slog
-        while(loaded<3 && (m=this.monkeys.find(mm=>mm.state==='trapped'))){ this.bananas+=m.def.bounty; if(m.carrying) this.bananas+=(m.carriedAmt||1); this.render.coinPop(m.x,m.y+3); this.render.removeMonkeyMesh(m); this.monkeys.splice(this.monkeys.indexOf(m),1); loaded++; }
-        if(loaded){ this.render.updateCore(Math.floor(this.bananas)); tr.loadT=0.13; SFX.pickup(); } else tr.stage='out'; }
-    } else { const ext=this.baseRadius(); tr.y=U.approach(tr.y,-(ext+20),26,dt); this.render.setTruck(true,tr.x,tr.y,0); if(tr.y<=-(ext+19)){ this.render.setTruck(false); this.endTruck(); } }
+  // wave-end truck: enters from the south, then drives a nearest-neighbour TOUR to each trapped monkey, caging it into the bed; finally drives off
+  startTruck(){ this.phase='truck';
+    const entry={x:0, y:-(this.baseRadius()+16)};
+    const pool=this.monkeys.filter(m=>m.state==='trapped'), route=[]; let cur=entry;
+    while(pool.length){ let bi=0,bd=1e9; for(let i=0;i<pool.length;i++){ const d=U.dist2(cur.x,cur.y,pool[i].x,pool[i].y); if(d<bd){bd=d;bi=i;} } cur=pool[bi]; route.push(pool[bi]); pool.splice(bi,1); }
+    this.render.clearTruckBed();
+    this.truck={x:entry.x,y:entry.y,ang:Math.PI/2,route,ri:0,loaded:0,grabT:0,stage:route.length?'drive':'out'};
+    this.render.setTruck(true,entry.x,entry.y,Math.PI/2); SFX.turret(); }
+  updateTruck(dt){ const tr=this.truck, sp=36;
+    if(tr.stage==='drive'){ const m=tr.route[tr.ri];
+      if(!m || m.state!=='trapped'){ if(++tr.ri>=tr.route.length) tr.stage='out'; this.render.setTruck(true,tr.x,tr.y,tr.ang); return; }
+      const d=U.dist(tr.x,tr.y,m.x,m.y); tr.ang=U.ang(tr.x,tr.y,m.x,m.y);
+      if(d<6){ tr.stage='grab'; tr.grabT=0.2; } else { tr.x+=Math.cos(tr.ang)*sp*dt; tr.y+=Math.sin(tr.ang)*sp*dt; }
+      this.render.setTruck(true,tr.x,tr.y,tr.ang);
+    } else if(tr.stage==='grab'){ tr.grabT-=dt; this.render.setTruck(true,tr.x,tr.y,tr.ang);
+      if(tr.grabT<=0){ const m=tr.route[tr.ri];
+        if(m && m.state==='trapped'){ this.bananas+=m.def.bounty; if(m.carrying) this.bananas+=(m.carriedAmt||1);
+          this.render.addToTruckBed(m.type, tr.loaded++); this.render.removeMonkeyMesh(m); this.monkeys.splice(this.monkeys.indexOf(m),1);
+          this.render.updateCore(Math.floor(this.bananas)); this.render.coinPop(tr.x,tr.y+5); SFX.pickup(); }
+        tr.stage = (++tr.ri>=tr.route.length) ? 'out' : 'drive'; }
+    } else { const oy=-(this.baseRadius()+22); tr.ang=U.ang(tr.x,tr.y,0,oy);
+      tr.x=U.approach(tr.x,0,sp,dt); tr.y=U.approach(tr.y,oy,sp,dt); this.render.setTruck(true,tr.x,tr.y,tr.ang);
+      if(tr.y<=oy+1){ this.render.setTruck(false); this.render.clearTruckBed(); this.endTruck(); } }
   }
   endTruck(){ this.monkeys=this.monkeys.filter(m=>{ if(m.state!=='trapped') return true; this.render.removeMonkeyMesh(m); return false; }); this.nextWave(); }
 

@@ -174,7 +174,7 @@ class Renderer{
 
   /* ---------- base: reset, structures, walls, ghost, spawn markers ---------- */
   resetBase(){ for(const g of [this.structGroup,this.wallGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.wireGroup,this.clawGroup]){ while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); } }
-    this.claws=[]; this.clearGhost(); this._trainCount=0; this.setTruck(false); this.clearChunks(); }
+    this.claws=[]; this.clearGhost(); this._trainCount=0; this.setTruck(false); this.clearTruckBed(); this.clearChunks(); }
   makeFlagPole(){ const g=new THREE.Group();
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.3,9.5,8),this.mat(0xc9cdd2,{m:0.3})); pole.position.y=4.75; pole.castShadow=true; g.add(pole);
     const ball=new THREE.Mesh(new THREE.SphereGeometry(0.4,10,8),this.mat(0xffce5e,{e:0.2})); ball.position.y=9.6; g.add(ball);
@@ -325,13 +325,27 @@ class Renderer{
     if(CONFIG.build[type].max>1) for(let i=0;i<lv;i++){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.26,8,6),this.mat(ACCENT.gold,{e:0.4})); pip.position.set(0, topY+0.2+i*0.5, 0); g.add(pip); }
     return g; }
 
-  makeTruck(){ const g=new THREE.Group();
-    const bed=new THREE.Mesh(new THREE.BoxGeometry(6,3.4,10),this.mat(0x3a9a55,{e:0.05})); bed.position.set(0,3.0,-1); bed.castShadow=true; g.add(bed);
-    const cab=new THREE.Mesh(new THREE.BoxGeometry(5.6,3.2,4),this.mat(0x2f7a42)); cab.position.set(0,2.9,5); cab.castShadow=true; g.add(cab);
-    const wind=new THREE.Mesh(new THREE.BoxGeometry(5.0,1.6,0.3),this.mat(0xbfe6ff,{e:0.1})); wind.position.set(0,3.4,6.9); g.add(wind);
-    const bars=new THREE.Mesh(new THREE.BoxGeometry(6.2,3.6,10.2),new THREE.MeshBasicMaterial({color:0xddeecc,wireframe:true})); bars.position.copy(bed.position); g.add(bars);
+  makeTruck(){ const g=new THREE.Group(); const green=this.mat(0x2f7a42);
+    // OPEN flatbed (floor + low rails) so the caged captives stacked inside are visible
+    const floor=new THREE.Mesh(new THREE.BoxGeometry(6,0.5,10),this.mat(0x3a9a55,{e:0.05})); floor.position.set(0,1.5,-1); floor.castShadow=true; g.add(floor);
+    const sideH=1.6, fy=1.5+sideH/2;
+    const railL=new THREE.Mesh(new THREE.BoxGeometry(0.3,sideH,10),green); railL.position.set(-3,fy,-1); g.add(railL);
+    const railR=new THREE.Mesh(new THREE.BoxGeometry(0.3,sideH,10),green); railR.position.set(3,fy,-1); g.add(railR);
+    const railBk=new THREE.Mesh(new THREE.BoxGeometry(6,sideH,0.3),green); railBk.position.set(0,fy,-6); g.add(railBk);
+    const railFr=new THREE.Mesh(new THREE.BoxGeometry(6,sideH,0.3),green); railFr.position.set(0,fy,4); g.add(railFr);
+    const cab=new THREE.Mesh(new THREE.BoxGeometry(5.6,3.2,4),green); cab.position.set(0,2.9,6); cab.castShadow=true; g.add(cab);
+    const wind=new THREE.Mesh(new THREE.BoxGeometry(5.0,1.6,0.3),this.mat(0xbfe6ff,{e:0.1})); wind.position.set(0,3.4,7.9); g.add(wind);
     for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){ const w=new THREE.Mesh(new THREE.CylinderGeometry(1.4,1.4,1.0,12),this.mat(0x222222)); w.rotation.z=Math.PI/2; w.position.set(sx*3.2,1.4,sz*4); g.add(w); }
     return g; }
+  // a single caged captive that rides in the truck bed
+  makeCagedMonkey(type){ const def=CONFIG.monkeys[type]||CONFIG.monkeys.normal, g=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.SphereGeometry(0.6,10,8),this.mat(def.hex,{r:0.6})); body.scale.set(1,0.9,1); body.position.y=0.6; g.add(body);
+    const cage=new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.5),new THREE.MeshBasicMaterial({color:0xe8f0d8,wireframe:true,transparent:true,opacity:0.9})); cage.position.y=0.75; g.add(cage);
+    return g; }
+  // stack a captured monkey into the bed (2 columns × 3 rows per layer, then stack upward)
+  addToTruckBed(type,index){ this.truckBed=this.truckBed||[]; const per=6, layer=Math.floor(index/per), w=index%per, col=w%2, row=Math.floor(w/2);
+    const c=this.makeCagedMonkey(type); c.position.set(col?1.4:-1.4, 1.7+layer*1.7, -3.4+row*3.0); this.truck.add(c); this.truckBed.push(c); }
+  clearTruckBed(){ if(!this.truckBed) return; for(const c of this.truckBed){ this.truck.remove(c); this.disposeGroup(c); } this.truckBed=[]; }
 
   /* ---------- per-frame sync ---------- */
   syncHero(h,t){ const bob=h.moving?Math.abs(Math.sin(t*11))*0.45:0; this.hero.position.set(h.x,bob,h.y); if(h.aim!=null) this.hero.rotation.y=-h.aim+Math.PI/2;
@@ -346,7 +360,7 @@ class Renderer{
     for(let i=this.trainGroup.children.length-1;i>=0;i--){ const m=this.trainGroup.children[i]; if(!have.has(m)){ this.trainGroup.remove(m); this.disposeGroup(m); } } }
   syncNets(list){ while(this.netGroup.children.length<list.length){ const n=new THREE.Mesh(new THREE.TorusGeometry(0.8,0.18,6,10),new THREE.MeshBasicMaterial({color:0xffffff})); this.netGroup.add(n); }
     for(let i=0;i<this.netGroup.children.length;i++){ const c=this.netGroup.children[i]; if(i<list.length){ c.visible=true; c.position.set(list[i].x,2.2,list[i].y); c.rotation.x=Math.PI/2; c.rotation.z=(list[i].spin=(list[i].spin||0)+0.3); } else c.visible=false; } }
-  setTruck(v,x,y,ang){ this.truck.visible=v; if(v){ this.truck.position.set(x,0,y); this.truck.rotation.y=ang||0; } }
+  setTruck(v,x,y,ang){ this.truck.visible=v; if(v){ this.truck.position.set(x,0,y); this.truck.rotation.y=Math.PI/2-(ang||0); } }   // cab (+z) faces the travel heading
 
   /* ---------- camera ---------- */
   followCam(h,dt){ const k=Math.min(1,dt*4.2);
