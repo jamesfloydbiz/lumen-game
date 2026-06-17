@@ -44,7 +44,7 @@ class Game{
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
   selectTool(type){ if(!this.unlocked.has(type)) return; this.tool = (this.tool===type)?null:type; }
-  ghostPos(){ const s=CONFIG.snap; if(this.tool && this.aimPt) return {x:Math.round(this.aimPt.x/s)*s, y:Math.round(this.aimPt.y/s)*s};
+  ghostPos(){ const s=(this.tool&&CONFIG.build[this.tool]&&CONFIG.build[this.tool].snap)||CONFIG.snap; if(this.tool && this.aimPt) return {x:Math.round(this.aimPt.x/s)*s, y:Math.round(this.aimPt.y/s)*s};
     const a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
     return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
   occupied(x,y,minD){ for(const s of this.structures){ if(U.dist(x,y,s.x,s.y)<minD) return true; } for(const w of this.wallBlocks){ if(U.dist(x,y,w.x,w.y)<minD) return true; } return false; }
@@ -53,9 +53,9 @@ class Game{
   placeError(type,x,y){ const C=CONFIG, def=C.build[type]; if(!def) return 'Locked';
     if(!this.unlocked.has(type)) return 'Locked — survive more waves';
     if(this.bananas < def.cost(1)) return 'Need '+def.cost(1)+' bananas';
-    if(U.dist(x,y,C.core.x,C.core.y) < C.coreClear) return 'Too close to the pile';
+    if(U.dist(x,y,C.core.x,C.core.y) < (def.clear??C.coreClear)) return 'Too close to the pile';
     if(this.inWater(x,y)) return "Can't build on the river";
-    if(this.occupied(x,y, C.snap*0.9)) return 'Blocked — too close to another build';
+    if(this.occupied(x,y, def.gap ?? C.snap*0.9)) return 'Blocked — too close to another build';
     const cols=this.render.colliders; if(cols){ const foot=def.foot||2; for(const c of cols){ if(U.dist(x,y,c.x,c.y) < foot+c.r) return 'Blocked — clear the trees & rocks first'; } }
     return null; }
   canPlace(type,x,y){ return !this.placeError(type,x,y); }

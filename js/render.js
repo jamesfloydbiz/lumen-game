@@ -306,15 +306,15 @@ class Renderer{
       const silos=Math.ceil(lv/2), sh=2.6+lv*0.4; for(let s=0;s<silos;s++){ const silo=new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.0,sh,12),this.mat(0xddae5a)); silo.position.set(2.6, sh/2+0.4, 2.6 - s*2.3); silo.castShadow=true; g.add(silo);
         const roof=new THREE.Mesh(new THREE.ConeGeometry(1.15,1.0,12),this.mat(0xb98842,{flat:true})); roof.position.set(2.6, sh+0.9, 2.6 - s*2.3); g.add(roof); }
       const warn=new THREE.Sprite(new THREE.SpriteMaterial({map:this.glowTex,color:0xff5a4a,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); warn.scale.set(3.2,3.2,1); warn.position.y=6.4; warn.visible=false; g.add(warn); g.userData.warn=warn; topY=sh+1.4; }
-    else if(type==='supply'){ const ph=this.WIRE_H+0.6; const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,ph,7),this.mat(0xffffff,{flat:true,r:0.85,map:this.woodTex})); pole.position.y=ph/2; pole.castShadow=true; g.add(pole);
-      const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,1.5,5),this.mat(0x6f4a28,{flat:true})); arm.rotation.z=Math.PI/2; arm.position.y=this.WIRE_H+0.2; g.add(arm);
-      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,6),this.mat(0xc8a25a)); cap.position.y=ph; g.add(cap); topY=ph+0.4; }
+    else if(type==='supply'){ const ph=this.WIRE_H+0.6; const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.17,ph,7),this.mat(0xffffff,{flat:true,r:0.85,map:this.woodTex})); pole.position.y=ph/2; pole.castShadow=true; g.add(pole);
+      const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.95,5),this.mat(0x6f4a28,{flat:true})); arm.rotation.z=Math.PI/2; arm.position.y=this.WIRE_H+0.2; g.add(arm);
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.22,8,6),this.mat(0xc8a25a)); cap.position.y=ph; g.add(cap); topY=ph+0.4; }
     else if(type==='trainee'){ const cnt=Math.max(1,lv); // a tent per recruited keeper, clustered
       for(let i=0;i<cnt;i++){ const a=i*2.39, rr=cnt>1?1.2:0; const tent=new THREE.Mesh(new THREE.ConeGeometry(1.5,2.4,4),this.mat(0x6ea83a,{flat:true})); tent.rotation.y=Math.PI/4; tent.position.set(Math.cos(a)*rr,1.2,Math.sin(a)*rr); tent.castShadow=true; g.add(tent); }
       const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,3.2+lv*0.3,5),this.mat(0x7a5230,{flat:true})); mast.position.y=(3.2+lv*0.3)/2; g.add(mast);
       const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.7,1.0+lv*0.18),this.mat(0x8ed24a,{e:0.2})); flag.position.set(0,3.0+lv*0.3,0.5+lv*0.09); g.add(flag); topY=3.4+lv*0.3; }
-    // universal rank: a stack of gold pips = level, so every upgrade reads at a glance
-    for(let i=0;i<lv;i++){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.26,8,6),this.mat(ACCENT.gold,{e:0.4})); pip.position.set(0, topY+0.2+i*0.5, 0); g.add(pip); }
+    // universal rank: a stack of gold pips = level, so every upgrade reads at a glance (skip un-upgradeable builds like supply poles)
+    if(CONFIG.build[type].max>1) for(let i=0;i<lv;i++){ const pip=new THREE.Mesh(new THREE.SphereGeometry(0.26,8,6),this.mat(ACCENT.gold,{e:0.4})); pip.position.set(0, topY+0.2+i*0.5, 0); g.add(pip); }
     return g; }
 
   makeTruck(){ const g=new THREE.Group();
