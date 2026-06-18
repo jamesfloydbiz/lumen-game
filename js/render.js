@@ -11,8 +11,9 @@ const ACCENT = { net:0x49b7e8, gold:0xffce5e, mud:0x9a6a38, wood:0xc08a3a, lime:
 class Renderer{
   constructor(canvas, game){
     this.game=game; const C=CONFIG; this.WIRE_H=4.2;
-    const r=this.renderer=new THREE.WebGLRenderer({canvas, antialias:true});
-    r.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+    const r=this.renderer=new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent||''), dprCap=isIOS?1.25:1.5;   // cap DPR — a 2x fullscreen framebuffer is the big GPU cost Safari kills tabs over
+    r.setPixelRatio(Math.min(dprCap, window.devicePixelRatio||1));
     r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
     r.outputEncoding=THREE.sRGBEncoding; r.toneMapping=THREE.NoToneMapping;
 
@@ -29,7 +30,7 @@ class Renderer{
 
     scene.add(new THREE.HemisphereLight(0xcfeaff, 0x4e7a32, 0.5));
     const sun=this.sun=new THREE.DirectionalLight(0xfff0cf, 1.25); sun.position.set(40,86,30); sun.castShadow=true;
-    sun.shadow.mapSize.set(2048,2048); const sc=sun.shadow.camera; sc.near=20; sc.far=260; sc.left=-90; sc.right=90; sc.top=90; sc.bottom=-90; sun.shadow.bias=-0.0004;
+    sun.shadow.mapSize.set(1024,1024); const sc=sun.shadow.camera; sc.near=20; sc.far=260; sc.left=-90; sc.right=90; sc.top=90; sc.bottom=-90; sun.shadow.bias=-0.0004;
     scene.add(sun); scene.add(sun.target);
     const fill=new THREE.DirectionalLight(0xbfe0ff,0.22); fill.position.set(-40,40,-30); scene.add(fill);
     const rim=new THREE.DirectionalLight(0xaad2ff,0.55); rim.position.set(-55,30,-65); scene.add(rim);   // cool back rim separates silhouettes
@@ -64,7 +65,11 @@ class Renderer{
   }
 
   /* ---------- materials / textures ---------- */
-  mat(hex,o={}){ return new THREE.MeshStandardMaterial({color:hex,map:o.map||null,roughness:o.r??0.75,metalness:o.m||0,emissive:o.e?hex:0,emissiveIntensity:o.e||0,flatShading:!!o.flat}); }
+  // shared, cached materials — props/towers/monkeys reuse a few dozen instances instead of allocating one per mesh (big JS-heap + GC win)
+  mat(hex,o={}){ const key=hex+'|'+(o.map?o.map.uuid:'-')+'|'+(o.r??0.75)+'|'+(o.m||0)+'|'+(o.e||0)+'|'+(o.flat?1:0);
+    this._matCache=this._matCache||new Map(); let m=this._matCache.get(key); if(m) return m;
+    m=new THREE.MeshStandardMaterial({color:hex,map:o.map||null,roughness:o.r??0.75,metalness:o.m||0,emissive:o.e?hex:0,emissiveIntensity:o.e||0,flatShading:!!o.flat});
+    m.userData._shared=true; this._matCache.set(key,m); return m; }
   makeGrassTex(){ const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
     x.fillStyle='#54992f'; x.fillRect(0,0,256,256);
     for(let i=0;i<2600;i++){ const g=Math.random(); x.fillStyle=g<0.5?'#5fa838':(g<0.8?'#4a8a2b':'#6cb842'); const s=1+Math.random()*2; x.fillRect(Math.random()*256,Math.random()*256,s,s); }
@@ -133,7 +138,8 @@ class Renderer{
     const bars=new THREE.Mesh(new THREE.BoxGeometry(s*1.04,s*1.04,s*1.04),new THREE.MeshBasicMaterial({color:0x6a6f76,wireframe:true})); bars.position.y=s/2; g.add(bars); g.userData.col=1.4; return g; }
   makeMound(rng){ const s=4+rng()*4; const m=new THREE.Mesh(new THREE.SphereGeometry(s,10,7,0,TAU,0,Math.PI*0.5),this.mat(0x8a9098,{flat:true,r:1})); m.scale.y=0.32; m.position.y=-0.2; m.receiveShadow=true; m.castShadow=true; return m; }
   // free BOTH geometry and materials — disposing only geometry leaked a material (and its GPU program) per mesh on every chunk unload, which is what bloated the tab
-  disposeGroup(g){ g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m){ if(Array.isArray(m)) m.forEach(x=>x&&x.dispose()); else m.dispose(); } }); }
+  // free geometry always; dispose only NON-shared materials (cached mat() instances are reused, so disposing them would break other meshes)
+  disposeGroup(g){ g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); const m=o.material; if(m){ const arr=Array.isArray(m)?m:[m]; for(const x of arr){ if(x && !(x.userData&&x.userData._shared)) x.dispose(); } } }); }
   clearChunks(){ for(const [k,g] of this.chunks){ this.chunkGroup.remove(g); this.disposeGroup(g); } this.chunks.clear(); this.cleared.clear(); this._collDirty=true; }
   // chop down the world prop nearest (x,y): drop its mesh + collider and remember it so it doesn't respawn when the chunk reloads
   clearPropAt(x,y){ if(!this.colliders) return null; let best=null,bd=1e9; for(const c of this.colliders){ const d=U.dist(x,y,c.x,c.y); if(d<bd){bd=d;best=c;} } if(!best) return null;
