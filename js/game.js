@@ -172,7 +172,8 @@ class Game{
     $('sellBtn').onclick=()=>{ if(!this.sellMode && !this.built()) return; this.sellMode=!this.sellMode; if(this.sellMode){ this.tool=null; this.toast('Sell mode — tap a building to remove it'); } else this.render.setSellGhost(null); };
     $('cancelBtn').onclick=()=>{ this.tool=null; this.sellMode=false; this.render.setSellGhost(null); }; }
   bindInput(){ const keymap={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
-    addEventListener('keydown',e=>{ if(e.code==='Escape'){this.togglePause();return;} if(e.code==='Space'){ if(this.tool) this.placeTool(); else this.doUpgrade(); e.preventDefault(); return; } if(keymap[e.code]){this.input[keymap[e.code]]=true;e.preventDefault();} });
+    if(/[?&]debug/.test(location.search)) this.toggleDbg(true);
+    addEventListener('keydown',e=>{ if(e.code==='Backquote'){ this.toggleDbg(); return; } if(e.code==='Escape'){this.togglePause();return;} if(e.code==='Space'){ if(this.tool) this.placeTool(); else this.doUpgrade(); e.preventDefault(); return; } if(keymap[e.code]){this.input[keymap[e.code]]=true;e.preventDefault();} });
     addEventListener('keyup',e=>{ if(keymap[e.code]) this.input[keymap[e.code]]=false; });
     const cv=this.canvas, stick=document.getElementById('stick'), nub=document.getElementById('stickNub');
     const fromUI=t=>{ let el=t.target; while(el){ if(el.id==='build'||el.id==='hud'||el.classList&&el.classList.contains('overlay')) return true; el=el.parentElement; } return false; };
@@ -317,7 +318,7 @@ class Game{
   banner(k,n){ const b=document.getElementById('banner'); b.innerHTML=`<span class="wb-k">${k}</span>`+(n?`<span class="wb-s">${n}</span>`:''); b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
   toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(this._tt); this._tt=setTimeout(()=>t.classList.remove('show'),1900); }
 
-  loop(now){ let dt=(now-this.last)/1000; this.last=now; if(dt>0.033) dt=0.033;
+  loop(now){ const raw=(now-this.last)/1000; this.last=now; let dt=raw>0.033?0.033:raw; if(raw>0.0001) this._rawFps=this._rawFps?this._rawFps*0.9+(1/raw)*0.1:1/raw;
     if(this.phase==='play'||this.phase==='truck') this.update(dt);
     const t=this.time, playing=this.phase!=='over'&&this.phase!=='menu';
     if(this.monkeys) this.render.syncMonkeys(this.monkeys);
@@ -327,7 +328,18 @@ class Game{
       if(this.sellMode){ this.render.clearGhost(); const t=this.sellTargetAt(this.aimPt); this.render.setSellGhost(t?{x:t.obj.x,y:t.obj.y}:null); }
       else { this.render.setSellGhost(null); if(this.tool){ const gp=this.ghostPos(); this.render.setGhost(this.tool,gp.x,gp.y,this.canPlace(this.tool,gp.x,gp.y)); } else this.render.clearGhost(); } }
     this.render.streamWorld(this.hero); this.render.updateFx(dt); this.render.followCam(this.hero,dt); this.render.draw();
+    if(this.dbg) this.updateDbg(dt);
     requestAnimationFrame(t2=>this.loop(t2));
   }
+  // diagnostic overlay — add ?debug to the URL (or press the backtick key). Safari has no JS-heap API, so we surface GPU resource counts.
+  toggleDbg(on){ this.dbg=(on===undefined)?!this.dbg:on; const el=document.getElementById('dbg'); if(el) el.classList.toggle('hidden',!this.dbg); }
+  updateDbg(dt){ this._dbgT=(this._dbgT||0)+dt; if(this._dbgT<0.5) return; this._dbgT=0;
+    const ri=this.render.renderer.info, el=document.getElementById('dbg'); if(!el) return;
+    this._peakGeom=Math.max(this._peakGeom||0, ri.memory.geometries);
+    const o={ fps:Math.round(this._rawFps||0), wave:this.wave, structures:this.structures.length, walls:this.wallBlocks.length, monkeys:this.monkeys?this.monkeys.length:0,
+      geometries:ri.memory.geometries, peakGeom:this._peakGeom, textures:ri.memory.textures, programs:ri.programs.length, drawCalls:ri.render.calls,
+      materials:this.render._matCache?this.render._matCache.size:0, liveChunks:this.render.chunks?this.render.chunks.size:0, dpr:this.render.renderer.getPixelRatio() };
+    window.mbStats=()=>o;
+    el.textContent='MONKEY BUSINESS · debug\n'+Object.entries(o).map(([k,v])=>k+': '+v).join('\n'); }
 }
 window.addEventListener('load',()=>{ window.game=new Game(); });
