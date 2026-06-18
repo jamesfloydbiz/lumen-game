@@ -31,7 +31,7 @@ const CONFIG = {
     net:     { name:'Net Tower',     accent:'net',  max:5, foot:2.6, cost:(lv)=>[8,14,24,40,62][lv-1],
                stat:(lv)=>({range:13+lv*2.4, rate:0.9+lv*0.4}), blurb:'Auto-nets the nearest raider.' },
     farm:    { name:'Banana Farm',   accent:'gold', max:5, foot:3.0, cost:(lv)=>[14,26,44,70,100][lv-1],
-               stat:(lv)=>({eco:1.2+lv*0.8}), blurb:'Grows bananas — only when linked to the pile by Supply Lines.' },
+               stat:(lv)=>({eco:0.7+lv*0.45}), blurb:'Grows bananas — only when linked to the pile by Supply Lines.' },
     wall:    { name:'Wall',          accent:'wood', max:1, foot:3.2, cost:()=>4, wall:true,
                stat:()=>({}), blurb:'A solid block — wall in the pile. Leave gaps for gates.' },
     supply:  { name:'Supply Line',   accent:'wood', max:1, foot:1.0, snap:2.5, clear:6, gap:2.0, cost:()=>2, supply:true,
@@ -84,14 +84,14 @@ const CONFIG = {
   totalWaves: 100,
   waveSpec(n){
     const boss = (n % 10 === 0);
-    // snappier waves: ~4 → ~12 → ~50 → ~100 monsters across the run (challenge comes from tougher types, not endless count)
-    const count = Math.round(3 + n*0.4 + Math.pow(n,1.1)*0.2);   // fewer but tankier (toughness scales via netBonus) → snappier waves
-    const interval = Math.max(0.22, 1.2 - n*0.06);
+    // more monsters + faster spawns than before — the base needs real defense, not just farms
+    const count = Math.round(3 + n*0.55 + Math.pow(n,1.18)*0.28);
+    const interval = Math.max(0.18, 1.15 - n*0.07);
     const frontiers = this.actFor(n).frontiers;
     const pool=[['normal', 1]];
-    if(n>=3) pool.push(['fast',  0.4 + n*0.03]);
-    if(n>=6) pool.push(['alpha', 0.2 + n*0.035]);     // heavier on multi-net types as waves climb
-    if(n>=9) pool.push(['bold',  0.3 + n*0.03]);
+    if(n>=3) pool.push(['fast',  0.4 + n*0.04]);
+    if(n>=5) pool.push(['alpha', 0.25 + n*0.045]);    // multi-net types arrive sooner & heavier
+    if(n>=8) pool.push(['bold',  0.3 + n*0.04]);
     if(frontiers.includes('zoo')){ pool.push(['mandrill', 0.7 + n*0.01]); pool.push(['gorilla', 0.4 + n*0.012]); }
     return { count, interval, pool, frontiers, boss };
   },

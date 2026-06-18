@@ -24,7 +24,7 @@ class Game{
   /* ---- run lifecycle ---- */
   beginRun(){ SFX.resume(); const C=CONFIG;
     this.bananas=C.bananas; this.wave=0; this.ecoRate=0; this._frontiers=[];   // bananas = the one resource (treasury + lives)
-    this.unlocked=new Set(C.startUnlocks); this.tool=null; this.sellMode=false;
+    this.unlocked=new Set(C.startUnlocks); this.tool=null; this.sellMode=false; this.stealMul=1; this.netBonus=0; this.waveSpeedMul=1;
     this.structures=[]; this.wallBlocks=[];
     this.monkeys=[]; this.nets=[]; this.trainees=[];
     this.netTowers=[]; this.decoys=[]; this.cages=[]; this.muds=[]; this.farms=[];
@@ -43,7 +43,9 @@ class Game{
       el.innerHTML=`<span class="tc-name">${def.name}</span><span class="tc-cost"><span class="banana-dot sm"></span>${def.cost(1)}</span>`;
       el.onclick=()=>this.selectTool(type); wrap.appendChild(el); this.chips[type]=el; }
   }
-  selectTool(type){ if(!this.unlocked.has(type)) return; this.sellMode=false; this.tool = (this.tool===type)?null:type; }
+  unlockWaveFor(type){ for(const w in CONFIG.unlockByWave){ if(CONFIG.unlockByWave[w]===type) return +w; } return null; }
+  selectTool(type){ if(!this.unlocked.has(type)){ const w=this.unlockWaveFor(type); this.toast(CONFIG.build[type].name+(w?(' unlocks at wave '+w):' is locked')); SFX.hurt(); return; }
+    this.sellMode=false; this.render.setSellGhost(null); this.tool = (this.tool===type)?null:type; }
   ghostPos(){ const s=(this.tool&&CONFIG.build[this.tool]&&CONFIG.build[this.tool].snap)||CONFIG.snap; if(this.tool && this.aimPt) return {x:Math.round(this.aimPt.x/s)*s, y:Math.round(this.aimPt.y/s)*s};
     const a=this.hero.face!=null?this.hero.face:-Math.PI/2, d=CONFIG.placeAhead;
     return {x:Math.round((this.hero.x+Math.cos(a)*d)/s)*s, y:Math.round((this.hero.y+Math.sin(a)*d)/s)*s}; }
@@ -70,8 +72,12 @@ class Game{
   placeTool(){ this.placeAt(this.ghostPos()); }
   upgradeTarget(){ if(this.tool) return null; let best=null,bd=CONFIG.hero.buildReach; const h=this.hero;
     for(const s of this.structures){ const def=CONFIG.build[s.type]; if(s.level>=def.max) continue; const d=U.dist(h.x,h.y,s.x,s.y); if(d<bd){bd=d;best=s;} } return best; }
-  doUpgrade(){ const s=this.upgradeTarget(); if(!s) return; const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost) return;
-    this.bananas-=cost; this.render.updateCore(Math.floor(this.bananas)); s.level++; s._dirty=true; this.rebuildDerived(); SFX.build(); }
+  doUpgrade(){ const s=this.upgradeTarget();
+    if(!s){ const h=this.hero; let near=null,bd=CONFIG.hero.buildReach; for(const st of this.structures){ const d=U.dist(h.x,h.y,st.x,st.y); if(d<bd){bd=d;near=st;} }
+      if(near && near.level>=CONFIG.build[near.type].max) this.toast(CONFIG.build[near.type].name+' is already max level');
+      else this.toast('Stand next to a building to upgrade it'); SFX.hurt(); return; }
+    const cost=CONFIG.build[s.type].cost(s.level+1); if(this.bananas<cost){ this.toast('Need '+cost+' bananas to upgrade'); SFX.hurt(); return; }
+    this.bananas-=cost; this.render.updateCore(Math.floor(this.bananas)); s.level++; s._dirty=true; this.rebuildDerived(); this.render.burst(s.x,s.y,ACCENT.gold); this.toast('Upgraded '+CONFIG.build[s.type].name+' to Lv'+s.level+' · -'+cost); SFX.build(); }
   /* ---- sell / refund (Sell MODE: tap Sell, then tap the build to remove — target = nearest build to the cursor, ~60% back) ---- */
   built(){ return this.structures.length+this.wallBlocks.length; }
   sellTargetAt(pt){ if(!pt) return null; let best=null,bd=49,kind=null;   // within 7m of the cursor
@@ -124,8 +130,9 @@ class Game{
   baseRadius(){ let r=22; for(const s of this.structures) r=Math.max(r,U.dist(s.x,s.y,0,0)); for(const w of this.wallBlocks) r=Math.max(r,U.dist(w.x,w.y,0,0)); return r; }
   nextWave(){ this.wave++; if(this.wave>CONFIG.totalWaves){ this.win(); return; }
     this.checkUnlocks();
-    const w=CONFIG.waveSpec(this.wave); this.waveDef=w; this.waveSpeedMul=1+(this.wave-1)*0.006;   // raiders get faster each wave (less time to net them)
-    this.netBonus=Math.floor((this.wave-1)/16);   // +1 net to trap every 16 waves — small bases get overwhelmed, big bases keep up
+    const w=CONFIG.waveSpec(this.wave); this.waveDef=w; this.waveSpeedMul=1+(this.wave-1)*0.010;   // raiders get faster each wave (less time to net them)
+    this.netBonus=Math.floor((this.wave-1)/12);   // +1 net to trap every 12 waves — toughen up sooner
+    this.stealMul=1+(this.wave-1)*0.045;           // each grab steals more as the run climbs — farms alone can't out-earn late raids
     const prev=this._frontiers||[]; const added=w.frontiers.filter(f=>!prev.includes(f) && prev.length); this._frontiers=w.frontiers.slice(); this.frontiers=w.frontiers;
     this.render.buildSpawnMarkers(w.frontiers);
     this.spawnQueue=[]; const tw=w.pool.reduce((s,p)=>s+p[1],0);
@@ -219,7 +226,7 @@ class Game{
         if(d<2.6){ m.state='grab'; m.grabT=m.def.grab; }
         else { m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt; }
       } else if(m.state==='grab'){
-        m.grabT-=dt; if(m.grabT<=0){ if(m.target.kind==='pile' && this.bananas>=1){ const amt=Math.min(Math.floor(this.bananas), m.def.steal||1); this.bananas-=amt; m.carrying=true; m.carriedAmt=amt; this.render.updateCore(Math.floor(this.bananas)); if(this.bananas<1) this.lose(); }
+        m.grabT-=dt; if(m.grabT<=0){ if(m.target.kind==='pile' && this.bananas>=1){ const amt=Math.min(Math.floor(this.bananas), Math.ceil((m.def.steal||1)*(this.stealMul||1))); this.bananas-=amt; m.carrying=true; m.carriedAmt=amt; this.render.updateCore(Math.floor(this.bananas)); if(this.bananas<1) this.lose(); }
           m.state='fleeing'; }
       } else if(m.state==='fleeing'){
         m.face=U.ang(m.x,m.y,m.sx,m.sy); m.x+=Math.cos(m.face)*spd*dt; m.y+=Math.sin(m.face)*spd*dt;
