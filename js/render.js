@@ -11,8 +11,10 @@ const ACCENT = { net:0x49b7e8, gold:0xffce5e, mud:0x9a6a38, wood:0xc08a3a, lime:
 class Renderer{
   constructor(canvas, game){
     this.game=game; const C=CONFIG; this.WIRE_H=4.2;
-    const r=this.renderer=new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
-    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent||''), dprCap=isIOS?1.25:1.5;   // cap DPR — a 2x fullscreen framebuffer is the big GPU cost Safari kills tabs over
+    const ua=navigator.userAgent||'', isIOS=/iPad|iPhone|iPod/.test(ua), isSafari=isIOS||/^((?!chrome|android|crios|fxios|edg).)*safari/i.test(ua);
+    // Safari kills tabs over GPU memory (unified RAM on iOS) and DOESN'T free WebGL memory on reload. Drop the MSAA buffer (antialias is a no-op on iOS Safari anyway) and cap DPR hard.
+    const r=this.renderer=new THREE.WebGLRenderer({canvas, antialias:!isSafari, powerPreference:'high-performance'});
+    const dprCap=isIOS?1.0:(isSafari?1.25:1.5);
     r.setPixelRatio(Math.min(dprCap, window.devicePixelRatio||1));
     r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
     r.outputEncoding=THREE.sRGBEncoding; r.toneMapping=THREE.NoToneMapping;
