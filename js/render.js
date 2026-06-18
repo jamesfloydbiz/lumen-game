@@ -168,7 +168,7 @@ class Renderer{
   closeZooGate(){ if(this.zooBars) this.zooBars.visible=true; this._zooOpen=false; }
 
   /* ---------- core pile ---------- */
-  buildCore(n){ const g=this.coreGroup; while(g.children.length) g.remove(g.children[0]);
+  buildCore(n){ const g=this.coreGroup; while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); }   // dispose old pile geometry — NOT freeing it leaked ~32 geometries every rebuild
     const dirt=new THREE.Mesh(new THREE.CircleGeometry(6,28),this.mat(0xffffff,{r:1,map:this.dirtTex})); dirt.rotation.x=-Math.PI/2; dirt.position.y=0.06; g.add(dirt);
     const show=Math.min(n,30), bMat=this.mat(0xffcf33,{r:0.38,m:0.12});
     for(let i=0;i<show;i++){ const a=i*2.39, rr=0.6+(i%5)*0.95, bx=Math.cos(a)*rr*0.85, bz=Math.sin(a)*rr*0.85, by=0.6+Math.floor(i/8)*1.0;
@@ -176,7 +176,7 @@ class Renderer{
       ban.position.set(bx,by,bz); ban.rotation.set(0,a,1.1+(i%3)*0.2); ban.castShadow=true; g.add(ban); }
     const sign=new THREE.Mesh(new THREE.BoxGeometry(0.4,3,0.4),this.mat(0x7a5230)); sign.position.set(0,1.5,-6.4); g.add(sign);
   }
-  updateCore(n){ if(n!==this._coreN){ this._coreN=n; this.buildCore(Math.max(0,n)); } }
+  updateCore(n){ const show=Math.min(Math.max(0,n),30); if(show!==this._coreShow){ this._coreShow=show; this.buildCore(Math.max(0,n)); } }   // rebuild only when the VISIBLE pile (capped at 30) changes — so eco income doesn't rebuild every frame
 
   /* ---------- base: reset, structures, walls, ghost, spawn markers ---------- */
   resetBase(){ for(const g of [this.structGroup,this.wallGroup,this.spawnGroup,this.monkeyGroup,this.trainGroup,this.wireGroup,this.clawGroup]){ while(g.children.length){ const c=g.children[0]; g.remove(c); this.disposeGroup(c); } }
