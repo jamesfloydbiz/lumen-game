@@ -70,7 +70,7 @@ body{font-family:var(--font);color:var(--ink);user-select:none;-webkit-user-sele
 .toolchip.locked .tc-name::after{content:" 🔒";}
 .coin-dot.sm{width:11px;height:11px;box-shadow:0 0 0 1.5px rgba(199,149,31,0.5) inset;}
 .banana-dot.sm{width:14px;height:9px;}
-.icon-pill{pointer-events:auto;cursor:pointer;padding:9px;} .icon-pill svg{fill:var(--ink-dim);} .icon-pill:active{transform:scale(0.94);}
+.icon-pill{pointer-events:auto;cursor:pointer;padding:9px;} .icon-pill svg{fill:var(--ink-dim);color:var(--ink-dim);} .icon-pill:active{transform:scale(0.94);} .icon-pill.off{opacity:0.5;}
 
 .wave-banner{position:absolute;top:30%;left:50%;transform:translate(-50%,-50%) scale(.9);text-align:center;opacity:0;pointer-events:none;font-weight:800;color:#fff;text-shadow:0 4px 24px rgba(0,0,0,0.35);}
 .wave-banner .wb-k{font-size:clamp(30px,8vw,54px);line-height:1.05;display:block;letter-spacing:0.04em;}

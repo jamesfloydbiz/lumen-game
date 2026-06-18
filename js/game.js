@@ -162,12 +162,19 @@ class Game{
       document.getElementById('pause').classList.remove('hidden'); }
     else { this.phase=this._prePause||'play'; document.getElementById('pause').classList.add('hidden'); } }
 
+  applyMute(m){ SFX.setMuted(m);
+    const hb=document.getElementById('hudMuteBtn'); if(hb){ hb.classList.toggle('off',m); hb.innerHTML = m
+      ? '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8 8 0 0 1 0 11.6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'; }
+    const pb=document.getElementById('muteBtn'); if(pb) pb.textContent='Sound: '+(m?'Off':'On'); }
   /* ---- input ---- */
   bindUI(){ const $=i=>document.getElementById(i);
     $('playBtn').onclick=()=>this.beginRun(); $('againBtn').onclick=()=>this.beginRun();
     $('pauseBtn').onclick=()=>this.togglePause(true); $('resumeBtn').onclick=()=>this.togglePause(false);
     $('restartBtn').onclick=()=>{ this.togglePause(false); this.beginRun(); };
-    $('muteBtn').onclick=e=>{ const m=!SFX.isMuted(); SFX.setMuted(m); e.target.textContent='Sound: '+(m?'Off':'On'); };
+    $('muteBtn').onclick=()=>this.applyMute(!SFX.isMuted());
+    $('hudMuteBtn').onclick=()=>this.applyMute(!SFX.isMuted());
+    this.applyMute(true);   // start MUTED by default — opt in to sound via either mute button
     $('buildBtn').onclick=()=>this.placeTool(); $('upgradeBtn').onclick=()=>this.doUpgrade(); $('clearBtn').onclick=()=>this.doClear();
     $('sellBtn').onclick=()=>{ if(!this.sellMode && !this.built()) return; this.sellMode=!this.sellMode; if(this.sellMode){ this.tool=null; this.toast('Sell mode — tap a building to remove it'); } else this.render.setSellGhost(null); };
     $('cancelBtn').onclick=()=>{ this.tool=null; this.sellMode=false; this.render.setSellGhost(null); }; }
